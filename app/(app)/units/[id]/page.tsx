@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getSignedUrl } from "@/lib/storage";
 import FileUploadField from "@/components/FileUploadField";
@@ -10,6 +10,7 @@ import type { Unit, Tenant, Contract, Maintenance } from "@/types";
 
 export default function UnitDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const supabase = createClient();
 
   const [unit, setUnit] = useState<Unit | null>(null);
@@ -18,6 +19,18 @@ export default function UnitDetailPage() {
   const [maintenance, setMaintenance] = useState<Maintenance[]>([]);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [showMaintForm, setShowMaintForm] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [editForm, setEditForm] = useState({
+    unit_name: "",
+    unit_type: "residential",
+    address: "",
+    status: "vacant",
+    notes: "",
+  });
+  const [editPhotoPath, setEditPhotoPath] = useState<string | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const [maintForm, setMaintForm] = useState({ repair_type: "", description: "", cost: "" });
@@ -28,6 +41,15 @@ export default function UnitDetailPage() {
   async function loadAll() {
     const { data: u } = await supabase.from("units").select("*").eq("id", id).single();
     setUnit(u);
+    if (u) {
+      setEditForm({
+        unit_name: u.unit_name ?? "",
+        unit_type: u.unit_type ?? "residential",
+        address: u.address ?? "",
+        status: u.status ?? "vacant",
+        notes: u.notes ?? "",
+      });
+    }
     if (u?.photo_url) setPhotoUrl(await getSignedUrl("unit-photos", u.photo_url));
 
     const { data: t } = await supabase.from("tenants").select("*").eq("unit_id", id).eq("active", true).maybeSingle();
@@ -75,6 +97,23 @@ export default function UnitDetailPage() {
     loadAll();
   }
 
+  async function handleSaveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingEdit(true);
+    const updates: any = { ...editForm };
+    if (editPhotoPath) updates.photo_url = editPhotoPath;
+    await supabase.from("units").update(updates).eq("id", id);
+    setShowEditForm(false);
+    setSavingEdit(false);
+    loadAll();
+  }
+
+  async function handleDelete() {
+    setDeleting(true);
+    await supabase.from("units").delete().eq("id", id);
+    router.push("/units");
+  }
+
   if (!unit) return <p className="text-sm text-inkmuted">Loading…</p>;
 
   const totalMaintCost = maintenance.reduce((sum, m) => sum + Number(m.cost), 0);
@@ -86,8 +125,102 @@ export default function UnitDetailPage() {
           <h1 className="font-display text-2xl font-semibold text-ink">{unit.unit_name}</h1>
           <p className="text-sm text-inkmuted mt-1 uppercase tracking-wide">{unit.unit_type} · {unit.address}</p>
         </div>
-        <StatusBadge status={unit.status} />
+        <div className="flex items-center gap-3">
+          <StatusBadge status={unit.status} />
+          <button
+            onClick={() => setShowEditForm((s) => !s)}
+            className="btn-secondary text-xs"
+          >
+            {showEditForm ? "Cancel" : "Edit"}
+          </button>
+          {confirmingDelete ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-bad">Delete this unit and its records?</span>
+              <button onClick={handleDelete} disabled={deleting} className="text-xs font-medium text-bad underline">
+                {deleting ? "Deleting…" : "Yes, delete"}
+              </button>
+              <button onClick={() => setConfirmingDelete(false)} className="text-xs text-inkmuted underline">
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmingDelete(true)}
+              className="text-xs font-medium text-bad underline"
+            >
+              Delete
+            </button>
+          )}
+        </div>
       </div>
+
+      {showEditForm && (
+        <form onSubmit={handleSaveEdit} className="card p-5 mb-6 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label-field">Unit name / number</label>
+              <input
+                required
+                className="input-field"
+                value={editForm.unit_name}
+                onChange={(e) => setEditForm({ ...editForm, unit_name: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="label-field">Type</label>
+              <select
+                className="input-field"
+                value={editForm.unit_type}
+                onChange={(e) => setEditForm({ ...editForm, unit_type: e.target.value })}
+              >
+                <option value="residential">Residential</option>
+                <option value="commercial">Commercial</option>
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label-field">Address</label>
+              <input
+                className="input-field"
+                value={editForm.address}
+                onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="label-field">Status</label>
+              <select
+                className="input-field"
+                value={editForm.status}
+                onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+              >
+                <option value="vacant">Vacant</option>
+                <option value="occupied">Occupied</option>
+                <option value="under_maintenance">Under Maintenance</option>
+              </select>
+            </div>
+          </div>
+          <FileUploadField
+            bucket="unit-photos"
+            label="Photo of the unit"
+            existingPath={unit.photo_url}
+            onUploaded={setEditPhotoPath}
+            accept="image/*"
+          />
+          <div>
+            <label className="label-field">Notes</label>
+            <textarea
+              className="input-field"
+              rows={2}
+              value={editForm.notes}
+              onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+            />
+          </div>
+          <button type="submit" disabled={savingEdit} className="btn-primary text-sm">
+            {savingEdit ? "Saving…" : "Save changes"}
+          </button>
+        </form>
+      )}
 
       <div className="grid grid-cols-3 gap-6 mb-8">
         <div className="card p-4 col-span-1">
