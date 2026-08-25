@@ -1,177 +1,92 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { getSignedUrl } from "@/lib/storage";
 import FileUploadField from "@/components/FileUploadField";
 import { StatusBadge } from "@/components/StatusBadge";
-import type { Unit, Tenant, Contract, Maintenance } from "@/types";
+import type { Unit } from "@/types";
 
-export default function UnitDetailPage() {
-  const { id } = useParams<{ id: string }>();
-  const router = useRouter();
+export default function UnitsPage() {
   const supabase = createClient();
-
-  const [unit, setUnit] = useState<Unit | null>(null);
-  const [tenant, setTenant] = useState<Tenant | null>(null);
-  const [contract, setContract] = useState<Contract | null>(null);
-  const [maintenance, setMaintenance] = useState<Maintenance[]>([]);
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
-  const [showMaintForm, setShowMaintForm] = useState(false);
-  const [showEditForm, setShowEditForm] = useState(false);
-  const [editForm, setEditForm] = useState({
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
     unit_name: "",
     unit_type: "residential",
     address: "",
     status: "vacant",
     notes: "",
   });
-  const [editPhotoPath, setEditPhotoPath] = useState<string | null>(null);
-  const [savingEdit, setSavingEdit] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [photoPath, setPhotoPath] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [maintForm, setMaintForm] = useState({ repair_type: "", description: "", cost: "" });
-  const [beforePhoto, setBeforePhoto] = useState<string | null>(null);
-  const [afterPhoto, setAfterPhoto] = useState<string | null>(null);
-  const [receiptPath, setReceiptPath] = useState<string | null>(null);
-
-  async function loadAll() {
-    const { data: u } = await supabase.from("units").select("*").eq("id", id).single();
-    setUnit(u);
-    if (u) {
-      setEditForm({
-        unit_name: u.unit_name ?? "",
-        unit_type: u.unit_type ?? "residential",
-        address: u.address ?? "",
-        status: u.status ?? "vacant",
-        notes: u.notes ?? "",
-      });
+  async function loadUnits() {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const { data, error } = await supabase
+        .from("units")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      setUnits(data ?? []);
+    } catch (err: any) {
+      console.error("Failed to load units:", err);
+      setLoadError(err?.message ?? "Something went wrong loading units.");
+    } finally {
+      setLoading(false);
     }
-    if (u?.photo_url) setPhotoUrl(await getSignedUrl("unit-photos", u.photo_url));
-
-    const { data: t } = await supabase.from("tenants").select("*").eq("unit_id", id).eq("active", true).maybeSingle();
-    setTenant(t);
-
-    const { data: c } = await supabase
-      .from("contracts")
-      .select("*")
-      .eq("unit_id", id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    setContract(c);
-
-    const { data: m } = await supabase
-      .from("maintenance")
-      .select("*")
-      .eq("unit_id", id)
-      .order("repair_date", { ascending: false });
-    setMaintenance(m ?? []);
   }
 
   useEffect(() => {
-    if (id) loadAll();
-  }, [id]);
+    loadUnits();
+  }, []);
 
-  async function handleAddMaintenance(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    await supabase.from("maintenance").insert({
-      unit_id: id,
-      repair_type: maintForm.repair_type,
-      description: maintForm.description,
-      cost: parseFloat(maintForm.cost) || 0,
-      before_photo_url: beforePhoto,
-      after_photo_url: afterPhoto,
-      materials_receipt_url: receiptPath,
-    });
-    setMaintForm({ repair_type: "", description: "", cost: "" });
-    setBeforePhoto(null);
-    setAfterPhoto(null);
-    setReceiptPath(null);
-    setShowMaintForm(false);
+    await supabase.from("units").insert({ ...form, photo_url: photoPath });
+    setForm({ unit_name: "", unit_type: "residential", address: "", status: "vacant", notes: "" });
+    setPhotoPath(null);
+    setShowForm(false);
     setSaving(false);
-    loadAll();
+    loadUnits();
   }
-
-  async function handleSaveEdit(e: React.FormEvent) {
-    e.preventDefault();
-    setSavingEdit(true);
-    const updates: any = { ...editForm };
-    if (editPhotoPath) updates.photo_url = editPhotoPath;
-    await supabase.from("units").update(updates).eq("id", id);
-    setShowEditForm(false);
-    setSavingEdit(false);
-    loadAll();
-  }
-
-  async function handleDelete() {
-    setDeleting(true);
-    await supabase.from("units").delete().eq("id", id);
-    router.push("/units");
-  }
-
-  if (!unit) return <p className="text-sm text-inkmuted">Loading…</p>;
-
-  const totalMaintCost = maintenance.reduce((sum, m) => sum + Number(m.cost), 0);
 
   return (
     <div>
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex items-start justify-between mb-8">
         <div>
-          <h1 className="font-display text-2xl font-semibold text-ink">{unit.unit_name}</h1>
-          <p className="text-sm text-inkmuted mt-1 uppercase tracking-wide">{unit.unit_type} · {unit.address}</p>
+          <h1 className="font-display text-2xl font-semibold text-ink">Units</h1>
+          <p className="text-sm text-inkmuted mt-1">All commercial and residential units under management.</p>
         </div>
-        <div className="flex items-center gap-3">
-          <StatusBadge status={unit.status} />
-          <button
-            onClick={() => setShowEditForm((s) => !s)}
-            className="btn-secondary text-xs"
-          >
-            {showEditForm ? "Cancel" : "Edit"}
-          </button>
-          {confirmingDelete ? (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-bad">Delete this unit and its records?</span>
-              <button onClick={handleDelete} disabled={deleting} className="text-xs font-medium text-bad underline">
-                {deleting ? "Deleting…" : "Yes, delete"}
-              </button>
-              <button onClick={() => setConfirmingDelete(false)} className="text-xs text-inkmuted underline">
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setConfirmingDelete(true)}
-              className="text-xs font-medium text-bad underline"
-            >
-              Delete
-            </button>
-          )}
-        </div>
+        <button onClick={() => setShowForm((s) => !s)} className="btn-primary text-sm">
+          {showForm ? "Cancel" : "+ Add Unit"}
+        </button>
       </div>
 
-      {showEditForm && (
-        <form onSubmit={handleSaveEdit} className="card p-5 mb-6 space-y-4">
+      {showForm && (
+        <form onSubmit={handleSubmit} className="card p-5 mb-6 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label-field">Unit name / number</label>
               <input
                 required
                 className="input-field"
-                value={editForm.unit_name}
-                onChange={(e) => setEditForm({ ...editForm, unit_name: e.target.value })}
+                value={form.unit_name}
+                onChange={(e) => setForm({ ...form, unit_name: e.target.value })}
+                placeholder="e.g. Unit 4A, Stall 2"
               />
             </div>
             <div>
               <label className="label-field">Type</label>
               <select
                 className="input-field"
-                value={editForm.unit_type}
-                onChange={(e) => setEditForm({ ...editForm, unit_type: e.target.value })}
+                value={form.unit_type}
+                onChange={(e) => setForm({ ...form, unit_type: e.target.value })}
               >
                 <option value="residential">Residential</option>
                 <option value="commercial">Commercial</option>
@@ -183,16 +98,16 @@ export default function UnitDetailPage() {
               <label className="label-field">Address</label>
               <input
                 className="input-field"
-                value={editForm.address}
-                onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
+                value={form.address}
+                onChange={(e) => setForm({ ...form, address: e.target.value })}
               />
             </div>
             <div>
               <label className="label-field">Status</label>
               <select
                 className="input-field"
-                value={editForm.status}
-                onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                value={form.status}
+                onChange={(e) => setForm({ ...form, status: e.target.value })}
               >
                 <option value="vacant">Vacant</option>
                 <option value="occupied">Occupied</option>
@@ -200,174 +115,48 @@ export default function UnitDetailPage() {
               </select>
             </div>
           </div>
-          <FileUploadField
-            bucket="unit-photos"
-            label="Photo of the unit"
-            existingPath={unit.photo_url}
-            onUploaded={setEditPhotoPath}
-            accept="image/*"
-          />
+          <FileUploadField bucket="unit-photos" label="Photo of the unit" onUploaded={setPhotoPath} accept="image/*" />
           <div>
             <label className="label-field">Notes</label>
             <textarea
               className="input-field"
               rows={2}
-              value={editForm.notes}
-              onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
             />
           </div>
-          <button type="submit" disabled={savingEdit} className="btn-primary text-sm">
-            {savingEdit ? "Saving…" : "Save changes"}
+          <button type="submit" disabled={saving} className="btn-primary text-sm">
+            {saving ? "Saving…" : "Save unit"}
           </button>
         </form>
       )}
 
-      <div className="grid grid-cols-3 gap-6 mb-8">
-        <div className="card p-4 col-span-1">
-          <p className="label-field">Unit photo</p>
-          {photoUrl ? (
-            <img src={photoUrl} alt={unit.unit_name} className="rounded-md w-full h-40 object-cover" />
-          ) : (
-            <div className="rounded-md w-full h-40 bg-paper flex items-center justify-center text-xs text-inkmuted">
-              No photo uploaded
-            </div>
-          )}
-        </div>
-
-        <div className="card p-4 col-span-1">
-          <p className="label-field">Current tenant</p>
-          {tenant ? (
-            <>
-              <p className="font-medium text-ink">{tenant.full_name}</p>
-              <p className="text-sm text-inkmuted">{tenant.contact_number}</p>
-              <p className="text-sm text-inkmuted">{tenant.email}</p>
-            </>
-          ) : (
-            <p className="text-sm text-inkmuted">No active tenant assigned. Add one from the Billing tab.</p>
-          )}
-        </div>
-
-        <div className="card p-4 col-span-1">
-          <p className="label-field">Contract</p>
-          {contract ? (
-            <>
-              <div className="mb-1"><StatusBadge status={contract.status} /></div>
-              <p className="text-sm text-inkmuted">Ends {contract.end_date}</p>
-              <p className="text-sm text-inkmuted font-mono">₱{Number(contract.monthly_rent).toLocaleString()}/mo</p>
-            </>
-          ) : (
-            <p className="text-sm text-inkmuted">No contract on file. Add one from the Contracts tab.</p>
-          )}
-        </div>
-      </div>
-
-      <div className="card p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="font-display text-lg font-semibold text-ink">Maintenance history</h2>
-            <p className="text-xs text-inkmuted mt-0.5">Total spent: ₱{totalMaintCost.toLocaleString()}</p>
-          </div>
-          <button onClick={() => setShowMaintForm((s) => !s)} className="btn-secondary text-sm">
-            {showMaintForm ? "Cancel" : "+ Log repair"}
+      {loading ? (
+        <p className="text-sm text-inkmuted">Loading…</p>
+      ) : loadError ? (
+        <div className="card p-5 border-bad/40">
+          <p className="text-sm font-medium text-bad mb-1">Couldn't load units</p>
+          <p className="text-xs text-inkmuted font-mono">{loadError}</p>
+          <button onClick={loadUnits} className="btn-secondary text-xs mt-3">
+            Try again
           </button>
         </div>
-
-        {showMaintForm && (
-          <form onSubmit={handleAddMaintenance} className="border border-border rounded-md p-4 mb-4 space-y-4 bg-paper/40">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="label-field">Repair type</label>
-                <input
-                  required
-                  className="input-field"
-                  placeholder="e.g. Plumbing, Repainting"
-                  value={maintForm.repair_type}
-                  onChange={(e) => setMaintForm({ ...maintForm, repair_type: e.target.value })}
-                />
+      ) : units.length === 0 ? (
+        <p className="text-sm text-inkmuted">No units yet. Add your first unit to get started.</p>
+      ) : (
+        <div className="grid grid-cols-3 gap-4">
+          {units.map((u) => (
+            <Link key={u.id} href={`/units/${u.id}`} className="card p-4 hover:border-seal/50 transition-colors">
+              <div className="flex items-start justify-between mb-2">
+                <h3 className="font-display font-semibold text-ink">{u.unit_name}</h3>
+                <StatusBadge status={u.status} />
               </div>
-              <div>
-                <label className="label-field">Cost of materials (₱)</label>
-                <input
-                  required
-                  type="number"
-                  step="0.01"
-                  className="input-field"
-                  value={maintForm.cost}
-                  onChange={(e) => setMaintForm({ ...maintForm, cost: e.target.value })}
-                />
-              </div>
-            </div>
-            <div>
-              <label className="label-field">Description</label>
-              <textarea
-                className="input-field"
-                rows={2}
-                value={maintForm.description}
-                onChange={(e) => setMaintForm({ ...maintForm, description: e.target.value })}
-              />
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              <FileUploadField bucket="maintenance-files" label="Before photo" onUploaded={setBeforePhoto} accept="image/*" />
-              <FileUploadField bucket="maintenance-files" label="After photo" onUploaded={setAfterPhoto} accept="image/*" />
-              <FileUploadField bucket="maintenance-files" label="Materials receipt" onUploaded={setReceiptPath} />
-            </div>
-            <button type="submit" disabled={saving} className="btn-primary text-sm">
-              {saving ? "Saving…" : "Save repair log"}
-            </button>
-          </form>
-        )}
-
-        {maintenance.length === 0 ? (
-          <p className="text-sm text-inkmuted">No maintenance logged for this unit yet.</p>
-        ) : (
-          <ul className="divide-y divide-border">
-            {maintenance.map((m) => (
-              <MaintenanceRow key={m.id} m={m} />
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function MaintenanceRow({ m }: { m: Maintenance }) {
-  const [beforeUrl, setBeforeUrl] = useState<string | null>(null);
-  const [afterUrl, setAfterUrl] = useState<string | null>(null);
-  const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
-
-  return (
-    <li className="py-3">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="font-medium text-ink text-sm">{m.repair_type}</p>
-          <p className="text-xs text-inkmuted">{m.repair_date} · {m.description}</p>
+              <p className="text-xs text-inkmuted uppercase tracking-wide mb-1">{u.unit_type}</p>
+              {u.address && <p className="text-sm text-inkmuted">{u.address}</p>}
+            </Link>
+          ))}
         </div>
-        <p className="font-mono text-sm text-ink">₱{Number(m.cost).toLocaleString()}</p>
-      </div>
-      <div className="flex gap-3 mt-2">
-        {m.before_photo_url && (
-          <FileLink bucket="maintenance-files" path={m.before_photo_url} label="Before photo" />
-        )}
-        {m.after_photo_url && (
-          <FileLink bucket="maintenance-files" path={m.after_photo_url} label="After photo" />
-        )}
-        {m.materials_receipt_url && (
-          <FileLink bucket="maintenance-files" path={m.materials_receipt_url} label="Receipt" />
-        )}
-      </div>
-    </li>
-  );
-}
-
-function FileLink({ bucket, path, label }: { bucket: string; path: string; label: string }) {
-  async function handleClick() {
-    const url = await getSignedUrl(bucket, path);
-    if (url) window.open(url, "_blank");
-  }
-  return (
-    <button onClick={handleClick} className="text-xs text-seal underline">
-      {label}
-    </button>
+      )}
+    </div>
   );
 }
