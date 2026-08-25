@@ -15,6 +15,10 @@ export default function PermitsPage() {
   const [saving, setSaving] = useState(false);
   const [filePath, setFilePath] = useState<string | null>(null);
 
+  const [error, setError] = useState<string | null>(null);
+  const [searchText, setSearchText] = useState("");
+  const [filterType, setFilterType] = useState("");
+
   const [form, setForm] = useState({
     permit_type: "mayors_permit" as PermitType,
     custom_type: "",
@@ -25,8 +29,15 @@ export default function PermitsPage() {
   });
 
   async function loadData() {
-    const { data: p } = await supabase.from("permits").select("*, units(*)").order("expiry_date", { ascending: true });
-    setPermits((p as any) ?? []);
+    const { data: p, error: loadErr } = await supabase
+      .from("permits")
+      .select("*, units(*)")
+      .order("expiry_date", { ascending: true });
+    if (loadErr) {
+      setError("Couldn't load documents: " + loadErr.message);
+    } else {
+      setPermits((p as any) ?? []);
+    }
     const { data: u } = await supabase.from("units").select("*").order("unit_name");
     setUnits(u ?? []);
   }
@@ -41,8 +52,9 @@ export default function PermitsPage() {
     const isOther = form.permit_type === "__other__";
     if (isOther && !form.custom_type.trim()) return;
     setSaving(true);
+    setError(null);
     const finalType = isOther ? form.custom_type.trim() : form.permit_type;
-    await supabase.from("permits").insert({
+    const { error: insertErr } = await supabase.from("permits").insert({
       permit_type: finalType,
       unit_id: form.unit_id || null,
       label: form.label || null,
@@ -50,14 +62,34 @@ export default function PermitsPage() {
       expiry_date: form.expiry_date || null,
       file_url: filePath,
     });
+    setSaving(false);
+    if (insertErr) {
+      setError("Couldn't save this document: " + insertErr.message);
+      return;
+    }
     setForm({ permit_type: "mayors_permit", custom_type: "", unit_id: "", label: "", issued_date: "", expiry_date: "" });
     setFilePath(null);
     setShowForm(false);
-    setSaving(false);
     loadData();
   }
 
   const today = new Date().toISOString().slice(0, 10);
+
+  const filteredPermits = permits.filter((p) => {
+    if (filterType && p.permit_type !== filterType) return false;
+    if (searchText.trim()) {
+      const haystack = [
+        PERMIT_LABELS[p.permit_type] || p.permit_type,
+        p.label,
+        p.units?.unit_name,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!haystack.includes(searchText.trim().toLowerCase())) return false;
+    }
+    return true;
+  });
 
   return (
     <div>
@@ -70,6 +102,12 @@ export default function PermitsPage() {
           {showForm ? "Cancel" : "+ Upload Document"}
         </button>
       </div>
+
+      {error && (
+        <div className="card p-4 mb-4 border-bad/40">
+          <p className="text-sm text-bad">{error}</p>
+        </div>
+      )}
 
       {showForm && (
         <form onSubmit={handleSubmit} className="card p-5 mb-6 space-y-4">
@@ -149,11 +187,33 @@ export default function PermitsPage() {
         </form>
       )}
 
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+        <input
+          type="text"
+          className="input-field"
+          placeholder="Search by name, unit, or label…"
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+        />
+        <select
+          className="input-field"
+          value={filterType}
+          onChange={(e) => setFilterType(e.target.value)}
+        >
+          <option value="">All document types</option>
+          {Array.from(new Set(permits.map((p) => p.permit_type))).map((t) => (
+            <option key={t} value={t}>{PERMIT_LABELS[t] || t}</option>
+          ))}
+        </select>
+      </div>
+
       <div className="card divide-y divide-border">
         {permits.length === 0 ? (
           <p className="text-sm text-inkmuted p-5">No documents uploaded yet.</p>
+        ) : filteredPermits.length === 0 ? (
+          <p className="text-sm text-inkmuted p-5">No documents match your search.</p>
         ) : (
-          permits.map((p) => {
+          filteredPermits.map((p) => {
             const expiringSoon = p.expiry_date && p.expiry_date <= today;
             return (
               <div key={p.id} className="p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -183,8 +243,16 @@ export default function PermitsPage() {
 
 function PermitViewButton({ path }: { path: string }) {
   async function handleClick() {
+    if (!path) {
+      alert("This document has no file attached — it may not have uploaded correctly. Try re-uploading it.");
+      return;
+    }
     const url = await getSignedUrl("permits", path);
-    if (url) window.open(url, "_blank");
+    if (url) {
+      window.open(url, "_blank");
+    } else {
+      alert("Couldn't open this file. It may have been removed from storage, or the link is broken — try re-uploading it.");
+    }
   }
   return (
     <button onClick={handleClick} className="text-xs text-seal underline">
