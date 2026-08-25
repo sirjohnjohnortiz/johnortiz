@@ -17,6 +17,7 @@ export default function PermitsPage() {
 
   const [form, setForm] = useState({
     permit_type: "mayors_permit" as PermitType,
+    custom_type: "",
     unit_id: "",
     label: "",
     issued_date: "",
@@ -37,16 +38,19 @@ export default function PermitsPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!filePath) return;
+    const isOther = form.permit_type === "__other__";
+    if (isOther && !form.custom_type.trim()) return;
     setSaving(true);
+    const finalType = isOther ? form.custom_type.trim() : form.permit_type;
     await supabase.from("permits").insert({
-      permit_type: form.permit_type,
+      permit_type: finalType,
       unit_id: form.unit_id || null,
       label: form.label || null,
       issued_date: form.issued_date || null,
       expiry_date: form.expiry_date || null,
       file_url: filePath,
     });
-    setForm({ permit_type: "mayors_permit", unit_id: "", label: "", issued_date: "", expiry_date: "" });
+    setForm({ permit_type: "mayors_permit", custom_type: "", unit_id: "", label: "", issued_date: "", expiry_date: "" });
     setFilePath(null);
     setShowForm(false);
     setSaving(false);
@@ -57,7 +61,7 @@ export default function PermitsPage() {
 
   return (
     <div>
-      <div className="flex items-start justify-between mb-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-8">
         <div>
           <h1 className="font-display text-2xl font-semibold text-ink">Permits &amp; Documents</h1>
           <p className="text-sm text-inkmuted mt-1">Business permits, tax declarations, and property clearances.</p>
@@ -69,7 +73,7 @@ export default function PermitsPage() {
 
       {showForm && (
         <form onSubmit={handleSubmit} className="card p-5 mb-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label-field">Document type</label>
               <select
@@ -80,6 +84,7 @@ export default function PermitsPage() {
                 {Object.entries(PERMIT_LABELS).map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
+                <option value="__other__">Other (type your own)…</option>
               </select>
             </div>
             <div>
@@ -96,6 +101,18 @@ export default function PermitsPage() {
               </select>
             </div>
           </div>
+          {form.permit_type === "__other__" && (
+            <div style={{ marginBottom: "14px" }}>
+              <label className="label-field">Custom document type name</label>
+              <input
+                required
+                className="input-field"
+                placeholder="e.g. Environmental Compliance Certificate"
+                value={form.custom_type}
+                onChange={(e) => setForm({ ...form, custom_type: e.target.value })}
+              />
+            </div>
+          )}
           <div>
             <label className="label-field">Custom label (optional)</label>
             <input
@@ -105,7 +122,7 @@ export default function PermitsPage() {
               onChange={(e) => setForm({ ...form, label: e.target.value })}
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label-field">Issued date</label>
               <input
@@ -139,10 +156,10 @@ export default function PermitsPage() {
           permits.map((p) => {
             const expiringSoon = p.expiry_date && p.expiry_date <= today;
             return (
-              <div key={p.id} className="p-4 flex items-center justify-between">
+              <div key={p.id} className="p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="font-medium text-ink text-sm">
-                    {PERMIT_LABELS[p.permit_type]}
+                    {PERMIT_LABELS[p.permit_type] || p.permit_type}
                     {p.label ? ` — ${p.label}` : ""}
                     {p.units?.unit_name ? ` (${p.units.unit_name})` : ""}
                   </p>

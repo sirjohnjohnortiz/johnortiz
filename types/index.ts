@@ -2,18 +2,7 @@ export type UnitType = "residential" | "commercial";
 export type UnitStatus = "occupied" | "vacant" | "under_maintenance";
 export type ContractStatus = "active" | "expiring_soon" | "expired" | "terminated";
 export type BillingStatus = "paid" | "pending" | "overdue";
-export type PermitType =
-  | "mayors_permit"
-  | "dti"
-  | "brgy_clearance"
-  | "fire_permit"
-  | "tax_declaration_property"
-  | "tax_declaration_building"
-  | "real_property_tax_property"
-  | "real_property_tax_building"
-  | "zonal_clearance"
-  | "occupancy_permit"
-  | "building_plan";
+export type PermitType = string;
 
 export interface Unit {
   id: string;
@@ -108,7 +97,7 @@ export interface AppNotification {
   created_at: string;
 }
 
-export const PERMIT_LABELS: Record<PermitType, string> = {
+export const PERMIT_LABELS: Record<string, string> = {
   mayors_permit: "Mayor's Permit",
   dti: "DTI Registration",
   brgy_clearance: "Barangay Clearance",
@@ -120,4 +109,6 @@ export const PERMIT_LABELS: Record<PermitType, string> = {
   zonal_clearance: "Zonal Clearance",
   occupancy_permit: "Occupancy Permit",
   building_plan: "Building Plan",
+  bir_2303: "BIR Form 2303 (Certificate of Registration)",
+  land_title: "Land Title",
 };
