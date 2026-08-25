@@ -1,0 +1,177 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { getSignedUrl } from "@/lib/storage";
+import FileUploadField from "@/components/FileUploadField";
+import type { Permit, PermitType, Unit } from "@/types";
+import { PERMIT_LABELS } from "@/types";
+
+export default function PermitsPage() {
+  const supabase = createClient();
+  const [permits, setPermits] = useState<Permit[]>([]);
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [filePath, setFilePath] = useState<string | null>(null);
+
+  const [form, setForm] = useState({
+    permit_type: "mayors_permit" as PermitType,
+    unit_id: "",
+    label: "",
+    issued_date: "",
+    expiry_date: "",
+  });
+
+  async function loadData() {
+    const { data: p } = await supabase.from("permits").select("*, units(*)").order("expiry_date", { ascending: true });
+    setPermits((p as any) ?? []);
+    const { data: u } = await supabase.from("units").select("*").order("unit_name");
+    setUnits(u ?? []);
+  }
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!filePath) return;
+    setSaving(true);
+    await supabase.from("permits").insert({
+      permit_type: form.permit_type,
+      unit_id: form.unit_id || null,
+      label: form.label || null,
+      issued_date: form.issued_date || null,
+      expiry_date: form.expiry_date || null,
+      file_url: filePath,
+    });
+    setForm({ permit_type: "mayors_permit", unit_id: "", label: "", issued_date: "", expiry_date: "" });
+    setFilePath(null);
+    setShowForm(false);
+    setSaving(false);
+    loadData();
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  return (
+    <div>
+      <div className="flex items-start justify-between mb-8">
+        <div>
+          <h1 className="font-display text-2xl font-semibold text-ink">Permits &amp; Documents</h1>
+          <p className="text-sm text-inkmuted mt-1">Business permits, tax declarations, and property clearances.</p>
+        </div>
+        <button onClick={() => setShowForm((s) => !s)} className="btn-primary text-sm">
+          {showForm ? "Cancel" : "+ Upload Document"}
+        </button>
+      </div>
+
+      {showForm && (
+        <form onSubmit={handleSubmit} className="card p-5 mb-6 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label-field">Document type</label>
+              <select
+                className="input-field"
+                value={form.permit_type}
+                onChange={(e) => setForm({ ...form, permit_type: e.target.value as PermitType })}
+              >
+                {Object.entries(PERMIT_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label-field">Related unit (optional)</label>
+              <select
+                className="input-field"
+                value={form.unit_id}
+                onChange={(e) => setForm({ ...form, unit_id: e.target.value })}
+              >
+                <option value="">Business-wide / not unit specific</option>
+                {units.map((u) => (
+                  <option key={u.id} value={u.id}>{u.unit_name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="label-field">Custom label (optional)</label>
+            <input
+              className="input-field"
+              placeholder="e.g. Renewed 2026"
+              value={form.label}
+              onChange={(e) => setForm({ ...form, label: e.target.value })}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label-field">Issued date</label>
+              <input
+                type="date"
+                className="input-field"
+                value={form.issued_date}
+                onChange={(e) => setForm({ ...form, issued_date: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="label-field">Expiry date</label>
+              <input
+                type="date"
+                className="input-field"
+                value={form.expiry_date}
+                onChange={(e) => setForm({ ...form, expiry_date: e.target.value })}
+              />
+            </div>
+          </div>
+          <FileUploadField bucket="permits" label="Document file" onUploaded={setFilePath} />
+          <button type="submit" disabled={saving || !filePath} className="btn-primary text-sm">
+            {saving ? "Saving…" : "Save document"}
+          </button>
+        </form>
+      )}
+
+      <div className="card divide-y divide-border">
+        {permits.length === 0 ? (
+          <p className="text-sm text-inkmuted p-5">No documents uploaded yet.</p>
+        ) : (
+          permits.map((p) => {
+            const expiringSoon = p.expiry_date && p.expiry_date <= today;
+            return (
+              <div key={p.id} className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-ink text-sm">
+                    {PERMIT_LABELS[p.permit_type]}
+                    {p.label ? ` — ${p.label}` : ""}
+                    {p.units?.unit_name ? ` (${p.units.unit_name})` : ""}
+                  </p>
+                  <p className="text-xs text-inkmuted mt-0.5">
+                    {p.issued_date ? `Issued ${p.issued_date}` : ""}
+                    {p.expiry_date ? ` · Expires ${p.expiry_date}` : ""}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {expiringSoon && <span className="stamp-bad">Expired</span>}
+                  <PermitViewButton path={p.file_url} />
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PermitViewButton({ path }: { path: string }) {
+  async function handleClick() {
+    const url = await getSignedUrl("permits", path);
+    if (url) window.open(url, "_blank");
+  }
+  return (
+    <button onClick={handleClick} className="text-xs text-seal underline">
+      View document
+    </button>
+  );
+}

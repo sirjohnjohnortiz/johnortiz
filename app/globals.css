@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #F5F2EA;
+    background-image:
+      radial-gradient(circle at 1px 1px, rgba(22,36,45,0.045) 1px, transparent 0);
+    background-size: 22px 22px;
+    color: #16242D;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-card border border-border rounded-card shadow-sm;
+  }
+
+  .stamp {
+    @apply inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide;
+  }
+  .stamp-good {
+    @apply stamp border-good/40 text-good bg-good/10;
+  }
+  .stamp-warn {
+    @apply stamp border-warn/40 text-warn bg-warn/10;
+  }
+  .stamp-bad {
+    @apply stamp border-bad/40 text-bad bg-bad/10;
+  }
+  .stamp-neutral {
+    @apply stamp border-inkmuted/30 text-inkmuted bg-inkmuted/10;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-md bg-ink px-4 py-2 text-sm font-medium text-paper hover:bg-ink/90 transition-colors disabled:opacity-50;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-md border border-border bg-card px-4 py-2 text-sm font-medium text-ink hover:bg-paper transition-colors disabled:opacity-50;
+  }
+  .input-field {
+    @apply w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-ink placeholder:text-inkmuted focus:outline-none focus:ring-2 focus:ring-seal/40 focus:border-seal;
+  }
+  .label-field {
+    @apply block text-xs font-semibold uppercase tracking-wide text-inkmuted mb-1.5;
+  }
+}
