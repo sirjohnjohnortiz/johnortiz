@@ -60,12 +60,12 @@ export default function BillingPage() {
 
   return (
     <div>
-      <div className="flex items-start justify-between mb-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-8">
         <div>
           <h1 className="font-display text-2xl font-semibold text-ink">Billing</h1>
           <p className="text-sm text-inkmuted mt-1">Monthly rent per tenant, with proof of payment.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button onClick={runFollowUps} disabled={generating} className="btn-secondary text-sm">
             {generating ? "Generating…" : "Generate follow-up billing"}
           </button>
@@ -77,7 +77,7 @@ export default function BillingPage() {
 
       {showForm && (
         <form onSubmit={handleSubmit} className="card p-5 mb-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label-field">Unit / tenant</label>
               <select
@@ -105,7 +105,7 @@ export default function BillingPage() {
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label-field">Amount due (₱)</label>
               <input
@@ -175,7 +175,7 @@ function BillingRow({ b, onChanged }: { b: Billing; onChanged: () => void }) {
 
   return (
     <div className="p-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="font-medium text-ink text-sm">
             {b.units?.unit_name} — {b.tenants?.full_name ?? "No tenant"}
@@ -212,7 +212,7 @@ function BillingRow({ b, onChanged }: { b: Billing; onChanged: () => void }) {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FileUploadField bucket="billing-proofs" label="Payment receipt" onUploaded={setReceiptPath} />
                 <FileUploadField bucket="billing-proofs" label="Deposit slip" onUploaded={setDepositPath} />
               </div>

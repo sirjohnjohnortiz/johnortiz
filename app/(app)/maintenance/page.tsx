@@ -58,7 +58,7 @@ export default function MaintenancePage() {
 
   return (
     <div>
-      <div className="flex items-start justify-between mb-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-8">
         <div>
           <h1 className="font-display text-2xl font-semibold text-ink">Maintenance</h1>
           <p className="text-sm text-inkmuted mt-1">
@@ -72,7 +72,7 @@ export default function MaintenancePage() {
 
       {showForm && (
         <form onSubmit={handleSubmit} className="card p-5 mb-6 space-y-4">
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="label-field">Unit</label>
               <select
@@ -127,7 +127,7 @@ export default function MaintenancePage() {
               onChange={(e) => setForm({ ...form, cost: e.target.value })}
             />
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <FileUploadField bucket="maintenance-files" label="Before photo" onUploaded={setBeforePhoto} accept="image/*" />
             <FileUploadField bucket="maintenance-files" label="After photo" onUploaded={setAfterPhoto} accept="image/*" />
             <FileUploadField bucket="maintenance-files" label="Materials receipt" onUploaded={setReceiptPath} />
@@ -158,7 +158,7 @@ function MaintRow({ r }: { r: Maintenance }) {
 
   return (
     <div className="p-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="font-medium text-ink text-sm">{r.units?.unit_name} — {r.repair_type}</p>
           <p className="text-xs text-inkmuted mt-0.5">{r.repair_date} · {r.description}</p>

@@ -7,6 +7,7 @@ import { getSignedUrl } from "@/lib/storage";
 import FileUploadField from "@/components/FileUploadField";
 import { StatusBadge } from "@/components/StatusBadge";
 import type { Unit, Tenant, Contract, Maintenance } from "@/types";
+import { PAYMENT_MODE_LABELS } from "@/types";
 
 export default function UnitDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -120,7 +121,7 @@ export default function UnitDetailPage() {
 
   return (
     <div>
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-6">
         <div>
           <h1 className="font-display text-2xl font-semibold text-ink">{unit.unit_name}</h1>
           <p className="text-sm text-inkmuted mt-1 uppercase tracking-wide">{unit.unit_type} · {unit.address}</p>
@@ -156,7 +157,7 @@ export default function UnitDetailPage() {
 
       {showEditForm && (
         <form onSubmit={handleSaveEdit} className="card p-5 mb-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label-field">Unit name / number</label>
               <input
@@ -178,7 +179,7 @@ export default function UnitDetailPage() {
               </select>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label-field">Address</label>
               <input
@@ -222,7 +223,7 @@ export default function UnitDetailPage() {
         </form>
       )}
 
-      <div className="grid grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         <div className="card p-4 col-span-1">
           <p className="label-field">Unit photo</p>
           {photoUrl ? (
@@ -254,6 +255,12 @@ export default function UnitDetailPage() {
               <div className="mb-1"><StatusBadge status={contract.status} /></div>
               <p className="text-sm text-inkmuted">Ends {contract.end_date}</p>
               <p className="text-sm text-inkmuted font-mono">₱{Number(contract.monthly_rent).toLocaleString()}/mo</p>
+              {contract.payment_mode && (
+                <p className="text-xs text-inkmuted mt-1">
+                  {PAYMENT_MODE_LABELS[contract.payment_mode] || contract.payment_mode}
+                  {contract.payment_notes ? ` — ${contract.payment_notes}` : ""}
+                </p>
+              )}
             </>
           ) : (
             <p className="text-sm text-inkmuted">No contract on file. Add one from the Contracts tab.</p>
@@ -274,7 +281,7 @@ export default function UnitDetailPage() {
 
         {showMaintForm && (
           <form onSubmit={handleAddMaintenance} className="border border-border rounded-md p-4 mb-4 space-y-4 bg-paper/40">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="label-field">Repair type</label>
                 <input
@@ -306,7 +313,7 @@ export default function UnitDetailPage() {
                 onChange={(e) => setMaintForm({ ...maintForm, description: e.target.value })}
               />
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <FileUploadField bucket="maintenance-files" label="Before photo" onUploaded={setBeforePhoto} accept="image/*" />
               <FileUploadField bucket="maintenance-files" label="After photo" onUploaded={setAfterPhoto} accept="image/*" />
               <FileUploadField bucket="maintenance-files" label="Materials receipt" onUploaded={setReceiptPath} />

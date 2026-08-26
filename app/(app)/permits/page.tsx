@@ -247,11 +247,17 @@ function PermitViewButton({ path }: { path: string }) {
       alert("This document has no file attached — it may not have uploaded correctly. Try re-uploading it.");
       return;
     }
+    // Open the tab immediately (synchronously, tied to the click) to avoid
+    // the browser's popup blocker silently swallowing it after the await below.
+    const newTab = window.open("", "_blank");
     const url = await getSignedUrl("permits", path);
-    if (url) {
-      window.open(url, "_blank");
+    if (url && newTab) {
+      newTab.location.href = url;
+    } else if (!newTab) {
+      alert("Your browser blocked the popup. Please allow popups for this site and try again.");
     } else {
       alert("Couldn't open this file. It may have been removed from storage, or the link is broken — try re-uploading it.");
+      newTab.close();
     }
   }
   return (

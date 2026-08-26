@@ -9,16 +9,18 @@ export default function DashboardPage() {
   const supabase = createClient();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [stats, setStats] = useState({ units: 0, occupied: 0, pendingBilling: 0, activeContracts: 0 });
+  const [revenue, setRevenue] = useState({ monthlyRentRoll: 0, collectedThisMonth: 0, collectedAllTime: 0 });
   const [loading, setLoading] = useState(true);
   const [checking, setChecking] = useState(false);
 
   async function loadData() {
     setLoading(true);
-    const [{ data: notes }, { data: units }, { data: billing }, { data: contracts }] = await Promise.all([
+    const [{ data: notes }, { data: units }, { data: billing }, { data: contracts }, { data: paidBilling }] = await Promise.all([
       supabase.from("notifications").select("*").eq("resolved", false).order("due_on", { ascending: true }),
       supabase.from("units").select("id,status"),
       supabase.from("billing").select("id,status").in("status", ["pending", "overdue"]),
-      supabase.from("contracts").select("id,status").eq("status", "active"),
+      supabase.from("contracts").select("id,status,monthly_rent").eq("status", "active"),
+      supabase.from("billing").select("amount_due,billing_period").eq("status", "paid"),
     ]);
     setNotifications(notes ?? []);
     setStats({
@@ -27,6 +29,21 @@ export default function DashboardPage() {
       pendingBilling: billing?.length ?? 0,
       activeContracts: contracts?.length ?? 0,
     });
+
+    const monthlyRentRoll = (contracts ?? []).reduce((sum, c) => sum + (Number(c.monthly_rent) || 0), 0);
+    const now = new Date();
+    const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    let collectedThisMonth = 0;
+    let collectedAllTime = 0;
+    (paidBilling ?? []).forEach((b: any) => {
+      const amt = Number(b.amount_due) || 0;
+      collectedAllTime += amt;
+      if (b.billing_period && String(b.billing_period).startsWith(currentMonthKey)) {
+        collectedThisMonth += amt;
+      }
+    });
+    setRevenue({ monthlyRentRoll, collectedThisMonth, collectedAllTime });
+
     setLoading(false);
   }
 
@@ -54,7 +71,7 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <div className="flex items-start justify-between mb-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-8">
         <div>
           <h1 className="font-display text-2xl font-semibold text-ink">Dashboard</h1>
           <p className="text-sm text-inkmuted mt-1">Overview of your properties, tenants, and alerts.</p>
@@ -64,11 +81,20 @@ export default function DashboardPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard label="Total Units" value={stats.units} />
         <StatCard label="Occupied" value={stats.occupied} />
         <StatCard label="Active Contracts" value={stats.activeContracts} />
         <StatCard label="Unpaid Bills" value={stats.pendingBilling} accent={stats.pendingBilling > 0} />
+      </div>
+
+      <div className="mb-8">
+        <h2 className="font-display text-lg font-semibold text-ink mb-3">Revenue</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <RevenueCard label="Monthly Rent Roll" value={revenue.monthlyRentRoll} sub="From active contracts" />
+          <RevenueCard label="Collected This Month" value={revenue.collectedThisMonth} sub="Paid bills, current month" good />
+          <RevenueCard label="Collected All Time" value={revenue.collectedAllTime} sub="All paid bills to date" />
+        </div>
       </div>
 
       <div className="card p-5">
@@ -111,6 +137,18 @@ function StatCard({ label, value, accent }: { label: string; value: number; acce
     <div className="card p-4">
       <p className="text-xs font-semibold uppercase tracking-wide text-inkmuted">{label}</p>
       <p className={`font-display text-3xl font-semibold mt-1 ${accent ? "text-bad" : "text-ink"}`}>{value}</p>
+    </div>
+  );
+}
+
+function RevenueCard({ label, value, sub, good }: { label: string; value: number; sub: string; good?: boolean }) {
+  return (
+    <div className="card p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-inkmuted">{label}</p>
+      <p className={`font-display text-2xl font-semibold mt-1 ${good ? "text-good" : "text-ink"}`}>
+        ₱{value.toLocaleString()}
+      </p>
+      <p className="text-xs text-inkmuted mt-1">{sub}</p>
     </div>
   );
 }

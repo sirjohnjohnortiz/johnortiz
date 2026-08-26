@@ -36,6 +36,8 @@ export interface Contract {
   status: ContractStatus;
   contract_file_url: string | null;
   renewal_reminder_days: number;
+  payment_mode: string | null;
+  payment_notes: string | null;
   created_at: string;
   units?: Unit;
   tenants?: Tenant;
@@ -96,6 +98,14 @@ export interface AppNotification {
   resolved: boolean;
   created_at: string;
 }
+
+export const PAYMENT_MODE_LABELS: Record<string, string> = {
+  cheque_annual: "Post-dated Cheque (Annual)",
+  cheque_monthly: "Cheque (Monthly pickup)",
+  bank_transfer: "Bank Transfer / Online",
+  cash: "Cash",
+  other: "Other",
+};
 
 export const PERMIT_LABELS: Record<string, string> = {
   mayors_permit: "Mayor's Permit",

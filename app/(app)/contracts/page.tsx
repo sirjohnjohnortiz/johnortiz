@@ -6,6 +6,7 @@ import { getSignedUrl } from "@/lib/storage";
 import FileUploadField from "@/components/FileUploadField";
 import { StatusBadge } from "@/components/StatusBadge";
 import type { Contract, Unit } from "@/types";
+import { PAYMENT_MODE_LABELS } from "@/types";
 
 export default function ContractsPage() {
   const supabase = createClient();
@@ -24,6 +25,8 @@ export default function ContractsPage() {
     end_date: "",
     monthly_rent: "",
     renewal_reminder_days: "30",
+    payment_mode: "bank_transfer",
+    payment_notes: "",
   });
 
   async function loadData() {
@@ -63,6 +66,8 @@ export default function ContractsPage() {
       monthly_rent: parseFloat(form.monthly_rent) || 0,
       renewal_reminder_days: parseInt(form.renewal_reminder_days) || 30,
       contract_file_url: contractFile,
+      payment_mode: form.payment_mode,
+      payment_notes: form.payment_notes || null,
       status: "active",
     });
 
@@ -77,6 +82,8 @@ export default function ContractsPage() {
       end_date: "",
       monthly_rent: "",
       renewal_reminder_days: "30",
+      payment_mode: "bank_transfer",
+      payment_notes: "",
     });
     setContractFile(null);
     setShowForm(false);
@@ -86,7 +93,7 @@ export default function ContractsPage() {
 
   return (
     <div>
-      <div className="flex items-start justify-between mb-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-8">
         <div>
           <h1 className="font-display text-2xl font-semibold text-ink">Contracts</h1>
           <p className="text-sm text-inkmuted mt-1">Lease terms and renewal tracking, per unit.</p>
@@ -98,7 +105,7 @@ export default function ContractsPage() {
 
       {showForm && (
         <form onSubmit={handleSubmit} className="card p-5 mb-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label-field">Unit</label>
               <select
@@ -126,7 +133,7 @@ export default function ContractsPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="label-field">Tenant name</label>
               <input
@@ -155,7 +162,7 @@ export default function ContractsPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="label-field">Start date</label>
               <input
@@ -183,6 +190,30 @@ export default function ContractsPage() {
                 className="input-field"
                 value={form.renewal_reminder_days}
                 onChange={(e) => setForm({ ...form, renewal_reminder_days: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="label-field">Payment mode</label>
+              <select
+                className="input-field"
+                value={form.payment_mode}
+                onChange={(e) => setForm({ ...form, payment_mode: e.target.value })}
+              >
+                {Object.entries(PAYMENT_MODE_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label-field">Payment details (optional)</label>
+              <input
+                className="input-field"
+                placeholder="e.g. Security Bank acct, or staff pickup schedule"
+                value={form.payment_notes}
+                onChange={(e) => setForm({ ...form, payment_notes: e.target.value })}
               />
             </div>
           </div>
@@ -221,12 +252,18 @@ function ContractRow({ c, onChanged }: { c: Contract; onChanged: () => void }) {
   }
 
   return (
-    <div className="p-4 flex items-center justify-between">
+    <div className="p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <p className="font-medium text-ink text-sm">{c.units?.unit_name} — {c.tenants?.full_name}</p>
         <p className="text-xs text-inkmuted mt-0.5">
           {c.start_date} to {c.end_date} · ₱{Number(c.monthly_rent).toLocaleString()}/mo
         </p>
+        {c.payment_mode && (
+          <p className="text-xs text-inkmuted mt-0.5">
+            {PAYMENT_MODE_LABELS[c.payment_mode] || c.payment_mode}
+            {c.payment_notes ? ` — ${c.payment_notes}` : ""}
+          </p>
+        )}
       </div>
       <div className="flex items-center gap-3">
         <StatusBadge status={c.status} />

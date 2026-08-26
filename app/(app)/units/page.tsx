@@ -58,7 +58,7 @@ export default function UnitsPage() {
 
   return (
     <div>
-      <div className="flex items-start justify-between mb-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-8">
         <div>
           <h1 className="font-display text-2xl font-semibold text-ink">Units</h1>
           <p className="text-sm text-inkmuted mt-1">All commercial and residential units under management.</p>
@@ -70,7 +70,7 @@ export default function UnitsPage() {
 
       {showForm && (
         <form onSubmit={handleSubmit} className="card p-5 mb-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label-field">Unit name / number</label>
               <input
@@ -93,7 +93,7 @@ export default function UnitsPage() {
               </select>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label-field">Address</label>
               <input
@@ -144,7 +144,7 @@ export default function UnitsPage() {
       ) : units.length === 0 ? (
         <p className="text-sm text-inkmuted">No units yet. Add your first unit to get started.</p>
       ) : (
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {units.map((u) => (
             <Link key={u.id} href={`/units/${u.id}`} className="card p-4 hover:border-seal/50 transition-colors">
               <div className="flex items-start justify-between mb-2">
