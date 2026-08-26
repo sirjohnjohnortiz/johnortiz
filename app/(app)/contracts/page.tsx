@@ -8,6 +8,19 @@ import { StatusBadge } from "@/components/StatusBadge";
 import type { Contract, Unit } from "@/types";
 import { PAYMENT_MODE_LABELS } from "@/types";
 
+const EMPTY_FORM = {
+  unit_id: "",
+  tenant_name: "",
+  tenant_contact: "",
+  tenant_email: "",
+  start_date: "",
+  end_date: "",
+  monthly_rent: "",
+  renewal_reminder_days: "30",
+  payment_mode: "bank_transfer",
+  payment_notes: "",
+};
+
 export default function ContractsPage() {
   const supabase = createClient();
   const [contracts, setContracts] = useState<Contract[]>([]);
@@ -15,19 +28,10 @@ export default function ContractsPage() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [contractFile, setContractFile] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingExistingFile, setEditingExistingFile] = useState<string | null>(null);
 
-  const [form, setForm] = useState({
-    unit_id: "",
-    tenant_name: "",
-    tenant_contact: "",
-    tenant_email: "",
-    start_date: "",
-    end_date: "",
-    monthly_rent: "",
-    renewal_reminder_days: "30",
-    payment_mode: "bank_transfer",
-    payment_notes: "",
-  });
+  const [form, setForm] = useState({ ...EMPTY_FORM });
 
   async function loadData() {
     const { data: c } = await supabase
@@ -43,49 +47,94 @@ export default function ContractsPage() {
     loadData();
   }, []);
 
+  function resetForm() {
+    setForm({ ...EMPTY_FORM });
+    setContractFile(null);
+    setEditingId(null);
+    setEditingExistingFile(null);
+  }
+
+  function startEdit(c: Contract) {
+    setEditingId(c.id);
+    setForm({
+      unit_id: c.unit_id,
+      tenant_name: c.tenants?.full_name ?? "",
+      tenant_contact: c.tenants?.contact_number ?? "",
+      tenant_email: c.tenants?.email ?? "",
+      start_date: c.start_date,
+      end_date: c.end_date,
+      monthly_rent: String(c.monthly_rent ?? ""),
+      renewal_reminder_days: String(c.renewal_reminder_days ?? 30),
+      payment_mode: c.payment_mode || "bank_transfer",
+      payment_notes: c.payment_notes || "",
+    });
+    setContractFile(null);
+    setEditingExistingFile(c.contract_file_url);
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
 
-    const { data: tenant } = await supabase
-      .from("tenants")
-      .insert({
+    if (editingId) {
+      // Update the contract itself
+      await supabase
+        .from("contracts")
+        .update({
+          unit_id: form.unit_id,
+          start_date: form.start_date,
+          end_date: form.end_date,
+          monthly_rent: parseFloat(form.monthly_rent) || 0,
+          renewal_reminder_days: parseInt(form.renewal_reminder_days) || 30,
+          payment_mode: form.payment_mode,
+          payment_notes: form.payment_notes || null,
+          ...(contractFile ? { contract_file_url: contractFile } : {}),
+        })
+        .eq("id", editingId);
+
+      // Keep the linked tenant's info in sync too
+      const editedContract = contracts.find((c) => c.id === editingId);
+      if (editedContract?.tenant_id) {
+        await supabase
+          .from("tenants")
+          .update({
+            full_name: form.tenant_name,
+            contact_number: form.tenant_contact,
+            email: form.tenant_email,
+          })
+          .eq("id", editedContract.tenant_id);
+      }
+    } else {
+      const { data: tenant } = await supabase
+        .from("tenants")
+        .insert({
+          unit_id: form.unit_id,
+          full_name: form.tenant_name,
+          contact_number: form.tenant_contact,
+          email: form.tenant_email,
+        })
+        .select()
+        .single();
+
+      await supabase.from("contracts").insert({
         unit_id: form.unit_id,
-        full_name: form.tenant_name,
-        contact_number: form.tenant_contact,
-        email: form.tenant_email,
-      })
-      .select()
-      .single();
+        tenant_id: tenant?.id,
+        start_date: form.start_date,
+        end_date: form.end_date,
+        monthly_rent: parseFloat(form.monthly_rent) || 0,
+        renewal_reminder_days: parseInt(form.renewal_reminder_days) || 30,
+        contract_file_url: contractFile,
+        payment_mode: form.payment_mode,
+        payment_notes: form.payment_notes || null,
+        status: "active",
+      });
 
-    await supabase.from("contracts").insert({
-      unit_id: form.unit_id,
-      tenant_id: tenant?.id,
-      start_date: form.start_date,
-      end_date: form.end_date,
-      monthly_rent: parseFloat(form.monthly_rent) || 0,
-      renewal_reminder_days: parseInt(form.renewal_reminder_days) || 30,
-      contract_file_url: contractFile,
-      payment_mode: form.payment_mode,
-      payment_notes: form.payment_notes || null,
-      status: "active",
-    });
+      await supabase.from("units").update({ status: "occupied" }).eq("id", form.unit_id);
+    }
 
-    await supabase.from("units").update({ status: "occupied" }).eq("id", form.unit_id);
-
-    setForm({
-      unit_id: "",
-      tenant_name: "",
-      tenant_contact: "",
-      tenant_email: "",
-      start_date: "",
-      end_date: "",
-      monthly_rent: "",
-      renewal_reminder_days: "30",
-      payment_mode: "bank_transfer",
-      payment_notes: "",
-    });
-    setContractFile(null);
+    resetForm();
     setShowForm(false);
     setSaving(false);
     loadData();
@@ -98,13 +147,22 @@ export default function ContractsPage() {
           <h1 className="font-display text-2xl font-semibold text-ink">Contracts</h1>
           <p className="text-sm text-inkmuted mt-1">Lease terms and renewal tracking, per unit.</p>
         </div>
-        <button onClick={() => setShowForm((s) => !s)} className="btn-primary text-sm">
+        <button
+          onClick={() => {
+            if (showForm) resetForm();
+            setShowForm((s) => !s);
+          }}
+          className="btn-primary text-sm"
+        >
           {showForm ? "Cancel" : "+ New Contract"}
         </button>
       </div>
 
       {showForm && (
         <form onSubmit={handleSubmit} className="card p-5 mb-6 space-y-4">
+          {editingId && (
+            <p className="text-xs font-semibold uppercase tracking-wide text-seal">Editing existing contract</p>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label-field">Unit</label>
@@ -218,11 +276,30 @@ export default function ContractsPage() {
             </div>
           </div>
 
-          <FileUploadField bucket="contracts" label="Contract file" onUploaded={setContractFile} />
+          <FileUploadField
+            bucket="contracts"
+            label="Contract file"
+            existingPath={editingExistingFile}
+            onUploaded={setContractFile}
+          />
 
-          <button type="submit" disabled={saving} className="btn-primary text-sm">
-            {saving ? "Saving…" : "Save contract"}
-          </button>
+          <div className="flex gap-3">
+            <button type="submit" disabled={saving} className="btn-primary text-sm">
+              {saving ? "Saving…" : editingId ? "Update contract" : "Save contract"}
+            </button>
+            {editingId && (
+              <button
+                type="button"
+                onClick={() => {
+                  resetForm();
+                  setShowForm(false);
+                }}
+                className="btn-secondary text-sm"
+              >
+                Cancel edit
+              </button>
+            )}
+          </div>
         </form>
       )}
 
@@ -230,14 +307,14 @@ export default function ContractsPage() {
         {contracts.length === 0 ? (
           <p className="text-sm text-inkmuted p-5">No contracts yet.</p>
         ) : (
-          contracts.map((c) => <ContractRow key={c.id} c={c} onChanged={loadData} />)
+          contracts.map((c) => <ContractRow key={c.id} c={c} onChanged={loadData} onEdit={() => startEdit(c)} />)
         )}
       </div>
     </div>
   );
 }
 
-function ContractRow({ c, onChanged }: { c: Contract; onChanged: () => void }) {
+function ContractRow({ c, onChanged, onEdit }: { c: Contract; onChanged: () => void; onEdit: () => void }) {
   const supabase = createClient();
 
   async function handleView() {
@@ -265,8 +342,9 @@ function ContractRow({ c, onChanged }: { c: Contract; onChanged: () => void }) {
           </p>
         )}
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <StatusBadge status={c.status} />
+        <button onClick={onEdit} className="text-xs text-seal underline">Edit</button>
         {c.contract_file_url && (
           <button onClick={handleView} className="text-xs text-seal underline">View file</button>
         )}
