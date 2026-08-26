@@ -65,7 +65,7 @@ export default function Sidebar() {
         ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
       >
         <div className="px-5 py-5 border-b border-border flex items-center justify-between">
-          <div className="rounded-md border border-border bg-white px-3 py-2.5 flex-1">
+          <div className="px-1 py-2 flex-1">
             <img src="/logo.png" alt="Juan Ortiz Lessor" className="w-full h-auto" />
           </div>
           <button

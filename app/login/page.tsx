@@ -30,10 +30,9 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="mx-auto mb-4 h-14 w-14 rounded-full border-2 border-seal flex items-center justify-center">
-            <span className="font-display text-2xl text-seal">JO</span>
+          <div className="mx-auto mb-5 max-w-[300px] px-5 py-4">
+            <img src="/logo.png" alt="Juan Ortiz Lessor" className="w-full h-auto" />
           </div>
-          <h1 className="font-display text-2xl font-semibold text-ink">Juan Ortiz Lessor</h1>
           <p className="text-sm text-inkmuted mt-1">Property management, sign in to continue</p>
         </div>
 
