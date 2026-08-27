@@ -88,9 +88,38 @@ export interface Permit {
   units?: Unit;
 }
 
+export interface Cheque {
+  id: string;
+  unit_id: string;
+  tenant_id: string | null;
+  contract_id: string | null;
+  cheque_date: string;
+  amount: number;
+  cheque_number: string | null;
+  bank_name: string | null;
+  file_url: string;
+  status: "pending" | "archived";
+  created_at: string;
+  units?: Unit;
+  tenants?: Tenant;
+}
+
+export interface InsurancePolicy {
+  id: string;
+  unit_id: string;
+  insurer: string | null;
+  policy_number: string | null;
+  amount: number | null;
+  issued_date: string | null;
+  expiry_date: string | null;
+  file_url: string;
+  created_at: string;
+  units?: Unit;
+}
+
 export interface AppNotification {
   id: string;
-  kind: "renewal" | "payment_pending" | "permit_expiring";
+  kind: "renewal" | "payment_pending" | "permit_expiring" | "insurance_expiring";
   related_table: string;
   related_id: string;
   message: string;

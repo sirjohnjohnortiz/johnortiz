@@ -10,8 +10,10 @@ const NAV = [
   { href: "/units", label: "Units", icon: "▤" },
   { href: "/billing", label: "Billing", icon: "₱" },
   { href: "/contracts", label: "Contracts", icon: "✎" },
+  { href: "/cheques", label: "Cheques", icon: "🖹" },
   { href: "/maintenance", label: "Maintenance", icon: "⚒" },
   { href: "/permits", label: "Permits", icon: "◍" },
+  { href: "/insurance", label: "Insurance", icon: "☂" },
 ];
 
 export default function Sidebar() {
