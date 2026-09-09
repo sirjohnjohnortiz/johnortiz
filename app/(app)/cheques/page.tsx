@@ -22,11 +22,11 @@ export default function ChequesPage() {
   const [saving, setSaving] = useState(false);
   const [filePath, setFilePath] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"pending" | "archived">("pending");
+  const [statusTab, setStatusTab] = useState<"pending" | "archived">("pending");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingExistingFile, setEditingExistingFile] = useState<string | null>(null);
 
-  const [filterUnit, setFilterUnit] = useState("");
+  const [activeUnitId, setActiveUnitId] = useState<string>("__all__");
   const [sortBy, setSortBy] = useState("date_asc");
 
   const [form, setForm] = useState({ ...EMPTY_FORM });
@@ -136,9 +136,15 @@ export default function ChequesPage() {
     loadData();
   }
 
+  // Only show tenant tabs for units that actually have at least one cheque on file
+  const unitsWithCheques = useMemo(() => {
+    const idsWithCheques = new Set(cheques.map((c) => c.unit_id));
+    return units.filter((u) => idsWithCheques.has(u.id));
+  }, [units, cheques]);
+
   const filtered = useMemo(() => {
-    let list = cheques.filter((c) => c.status === tab);
-    if (filterUnit) list = list.filter((c) => c.unit_id === filterUnit);
+    let list = cheques.filter((c) => c.status === statusTab);
+    if (activeUnitId !== "__all__") list = list.filter((c) => c.unit_id === activeUnitId);
 
     list = [...list].sort((a, b) => {
       switch (sortBy) {
@@ -148,18 +154,16 @@ export default function ChequesPage() {
           return Number(b.amount) - Number(a.amount);
         case "amount_asc":
           return Number(a.amount) - Number(b.amount);
-        case "unit_name":
-          return (a.units?.unit_name ?? "").localeCompare(b.units?.unit_name ?? "");
         case "date_asc":
         default:
           return a.cheque_date.localeCompare(b.cheque_date);
       }
     });
     return list;
-  }, [cheques, tab, filterUnit, sortBy]);
+  }, [cheques, statusTab, activeUnitId, sortBy]);
 
   const summary = useMemo(() => {
-    const relevant = filterUnit ? cheques.filter((c) => c.unit_id === filterUnit) : cheques;
+    const relevant = activeUnitId === "__all__" ? cheques : cheques.filter((c) => c.unit_id === activeUnitId);
     const pendingTotal = relevant.filter((c) => c.status === "pending").reduce((s, c) => s + Number(c.amount), 0);
     const archivedTotal = relevant.filter((c) => c.status === "archived").reduce((s, c) => s + Number(c.amount), 0);
     return {
@@ -168,11 +172,11 @@ export default function ChequesPage() {
       pendingTotal,
       archivedTotal,
     };
-  }, [cheques, filterUnit]);
+  }, [cheques, activeUnitId]);
 
   return (
     <div>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-6">
         <div>
           <h1 className="font-display text-2xl font-semibold text-ink">Cheques</h1>
           <p className="text-sm text-inkmuted mt-1">
@@ -285,30 +289,46 @@ export default function ChequesPage() {
         </form>
       )}
 
-      {/* Filter, sort, and summary */}
+      {/* Tenant tabs — one per unit/tenant that has cheques on file */}
+      <div className="flex gap-2 overflow-x-auto pb-2 mb-4 -mx-1 px-1">
+        <button
+          onClick={() => setActiveUnitId("__all__")}
+          className={`shrink-0 rounded-full px-4 py-2 text-sm font-medium border transition-colors ${
+            activeUnitId === "__all__"
+              ? "bg-ink text-paper border-ink"
+              : "bg-card text-ink border-border hover:bg-paper"
+          }`}
+        >
+          All tenants
+        </button>
+        {unitsWithCheques.map((u) => {
+          const tenantName = u.tenants?.[0]?.full_name;
+          const active = activeUnitId === u.id;
+          return (
+            <button
+              key={u.id}
+              onClick={() => setActiveUnitId(u.id)}
+              className={`shrink-0 rounded-full px-4 py-2 text-sm font-medium border transition-colors ${
+                active ? "bg-ink text-paper border-ink" : "bg-card text-ink border-border hover:bg-paper"
+              }`}
+            >
+              {u.unit_name}
+              {tenantName ? <span className={active ? "text-paper/70" : "text-inkmuted"}> · {tenantName}</span> : ""}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Sort + summary */}
       <div className="card p-4 mb-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-          <div>
-            <label className="label-field">Filter by unit / tenant</label>
-            <select className="input-field" value={filterUnit} onChange={(e) => setFilterUnit(e.target.value)}>
-              <option value="">All units</option>
-              {units.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.unit_name} {u.tenants?.[0]?.full_name ? `— ${u.tenants[0].full_name}` : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="label-field">Sort by</label>
-            <select className="input-field" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-              <option value="date_asc">Cheque date (earliest first)</option>
-              <option value="date_desc">Cheque date (latest first)</option>
-              <option value="amount_desc">Amount (highest first)</option>
-              <option value="amount_asc">Amount (lowest first)</option>
-              <option value="unit_name">Unit name (A–Z)</option>
-            </select>
-          </div>
+        <div className="mb-4">
+          <label className="label-field">Sort by</label>
+          <select className="input-field max-w-xs" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+            <option value="date_asc">Cheque date (earliest first)</option>
+            <option value="date_desc">Cheque date (latest first)</option>
+            <option value="amount_desc">Amount (highest first)</option>
+            <option value="amount_asc">Amount (lowest first)</option>
+          </select>
         </div>
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div className="rounded-md bg-paper px-3 py-2">
@@ -324,23 +344,23 @@ export default function ChequesPage() {
 
       <div className="flex gap-2 mb-4">
         <button
-          onClick={() => setTab("pending")}
-          className={tab === "pending" ? "btn-primary text-xs" : "btn-secondary text-xs"}
+          onClick={() => setStatusTab("pending")}
+          className={statusTab === "pending" ? "btn-primary text-xs" : "btn-secondary text-xs"}
         >
-          Pending ({cheques.filter((c) => (filterUnit ? c.unit_id === filterUnit : true) && c.status === "pending").length})
+          Pending ({cheques.filter((c) => (activeUnitId === "__all__" ? true : c.unit_id === activeUnitId) && c.status === "pending").length})
         </button>
         <button
-          onClick={() => setTab("archived")}
-          className={tab === "archived" ? "btn-primary text-xs" : "btn-secondary text-xs"}
+          onClick={() => setStatusTab("archived")}
+          className={statusTab === "archived" ? "btn-primary text-xs" : "btn-secondary text-xs"}
         >
-          Archived ({cheques.filter((c) => (filterUnit ? c.unit_id === filterUnit : true) && c.status === "archived").length})
+          Archived ({cheques.filter((c) => (activeUnitId === "__all__" ? true : c.unit_id === activeUnitId) && c.status === "archived").length})
         </button>
       </div>
 
       <div className="card divide-y divide-border">
         {filtered.length === 0 ? (
           <p className="text-sm text-inkmuted p-5">
-            {tab === "pending" ? "No pending cheques." : "No archived cheques."}
+            {statusTab === "pending" ? "No pending cheques." : "No archived cheques."}
           </p>
         ) : (
           filtered.map((c) => (
