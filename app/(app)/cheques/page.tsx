@@ -415,7 +415,7 @@ export default function ChequesPage() {
         >
           All tenants
         </button>
-        {unitsWithCheques.map((u) => (
+        {units.map((u) => (
           <button
             key={u.id}
             onClick={() => setActiveUnitId(u.id)}
@@ -435,7 +435,7 @@ export default function ChequesPage() {
             <label className="label-field">Select Tenant</label>
             <select className="input-field" value={activeUnitId} onChange={(e) => setActiveUnitId(e.target.value)}>
               <option value="__all__">All tenants</option>
-              {unitsWithCheques.map((u) => (
+              {units.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.unit_name} {u.tenants?.[0]?.full_name ? `— ${u.tenants[0].full_name}` : ""}
                 </option>
