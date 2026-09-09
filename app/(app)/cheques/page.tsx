@@ -25,9 +25,15 @@ export default function ChequesPage() {
   const [statusTab, setStatusTab] = useState<"pending" | "archived">("pending");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingExistingFile, setEditingExistingFile] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const [activeUnitId, setActiveUnitId] = useState<string>("__all__");
   const [sortBy, setSortBy] = useState("date_asc");
+  const [searchText, setSearchText] = useState("");
+  const [dateStart, setDateStart] = useState("");
+  const [dateEnd, setDateEnd] = useState("");
+  const [page, setPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
 
   const [form, setForm] = useState({ ...EMPTY_FORM });
 
@@ -136,15 +142,51 @@ export default function ChequesPage() {
     loadData();
   }
 
-  // Only show tenant tabs for units that actually have at least one cheque on file
+  async function bulkArchive() {
+    if (selected.size === 0) return;
+    await supabase.from("cheques").update({ status: "archived" }).in("id", Array.from(selected));
+    setSelected(new Set());
+    loadData();
+  }
+
+  async function bulkDelete() {
+    if (selected.size === 0) return;
+    if (!confirm(`Delete ${selected.size} selected cheque(s) permanently?`)) return;
+    await supabase.from("cheques").delete().in("id", Array.from(selected));
+    setSelected(new Set());
+    loadData();
+  }
+
   const unitsWithCheques = useMemo(() => {
     const idsWithCheques = new Set(cheques.map((c) => c.unit_id));
     return units.filter((u) => idsWithCheques.has(u.id));
   }, [units, cheques]);
 
+  function countFor(unitId: string) {
+    return cheques.filter((c) => c.unit_id === unitId && c.status === statusTab).length;
+  }
+
   const filtered = useMemo(() => {
     let list = cheques.filter((c) => c.status === statusTab);
     if (activeUnitId !== "__all__") list = list.filter((c) => c.unit_id === activeUnitId);
+    if (dateStart) list = list.filter((c) => c.cheque_date >= dateStart);
+    if (dateEnd) list = list.filter((c) => c.cheque_date <= dateEnd);
+    if (searchText.trim()) {
+      const q = searchText.trim().toLowerCase();
+      list = list.filter((c) => {
+        const haystack = [
+          c.units?.unit_name,
+          c.tenants?.full_name,
+          c.bank_name,
+          c.cheque_number,
+          String(c.amount),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(q);
+      });
+    }
 
     list = [...list].sort((a, b) => {
       switch (sortBy) {
@@ -160,19 +202,52 @@ export default function ChequesPage() {
       }
     });
     return list;
-  }, [cheques, statusTab, activeUnitId, sortBy]);
+  }, [cheques, statusTab, activeUnitId, sortBy, searchText, dateStart, dateEnd]);
 
-  const summary = useMemo(() => {
-    const relevant = activeUnitId === "__all__" ? cheques : cheques.filter((c) => c.unit_id === activeUnitId);
-    const pendingTotal = relevant.filter((c) => c.status === "pending").reduce((s, c) => s + Number(c.amount), 0);
-    const archivedTotal = relevant.filter((c) => c.status === "archived").reduce((s, c) => s + Number(c.amount), 0);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
+  const pageSafe = Math.min(page, totalPages);
+  const paginated = filtered.slice((pageSafe - 1) * rowsPerPage, pageSafe * rowsPerPage);
+
+  useEffect(() => {
+    setPage(1);
+  }, [statusTab, activeUnitId, sortBy, searchText, dateStart, dateEnd, rowsPerPage]);
+
+  const overall = useMemo(() => {
+    const pending = cheques.filter((c) => c.status === "pending");
+    const archived = cheques.filter((c) => c.status === "archived");
+    const dates = cheques.map((c) => c.cheque_date).filter(Boolean).sort();
     return {
-      pendingCount: relevant.filter((c) => c.status === "pending").length,
-      archivedCount: relevant.filter((c) => c.status === "archived").length,
-      pendingTotal,
-      archivedTotal,
+      pendingCount: pending.length,
+      pendingTotal: pending.reduce((s, c) => s + Number(c.amount), 0),
+      archivedCount: archived.length,
+      archivedTotal: archived.reduce((s, c) => s + Number(c.amount), 0),
+      tenantCount: unitsWithCheques.length,
+      dateRange: dates.length > 0 ? `${dates[0].slice(0, 4)}–${dates[dates.length - 1].slice(0, 4)}` : "—",
     };
-  }, [cheques, activeUnitId]);
+  }, [cheques, unitsWithCheques]);
+
+  function toggleSelectAll() {
+    if (selected.size === paginated.length && paginated.length > 0) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(paginated.map((c) => c.id)));
+    }
+  }
+
+  function toggleSelectOne(id: string) {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelected(next);
+  }
+
+  function resetFilters() {
+    setActiveUnitId("__all__");
+    setSearchText("");
+    setDateStart("");
+    setDateEnd("");
+    setSortBy("date_asc");
+  }
 
   return (
     <div>
@@ -289,97 +364,247 @@ export default function ChequesPage() {
         </form>
       )}
 
-      {/* Tenant tabs — one per unit/tenant that has cheques on file */}
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+        <div className="card p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-inkmuted">Pending</p>
+          <p className="font-display text-2xl font-semibold mt-1 text-warn">{overall.pendingCount}</p>
+          <p className="text-xs text-inkmuted mt-1">Total amount: ₱{overall.pendingTotal.toLocaleString()}</p>
+        </div>
+        <div className="card p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-inkmuted">Archived</p>
+          <p className="font-display text-2xl font-semibold mt-1 text-good">{overall.archivedCount}</p>
+          <p className="text-xs text-inkmuted mt-1">Total amount: ₱{overall.archivedTotal.toLocaleString()}</p>
+        </div>
+        <div className="card p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-inkmuted">Tenants</p>
+          <p className="font-display text-2xl font-semibold mt-1 text-ink">{overall.tenantCount}</p>
+          <p className="text-xs text-inkmuted mt-1">With cheques on file</p>
+        </div>
+        <div className="card p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-inkmuted">Date Range</p>
+          <p className="font-display text-2xl font-semibold mt-1 text-ink">{overall.dateRange}</p>
+          <p className="text-xs text-inkmuted mt-1">Covered cheques</p>
+        </div>
+      </div>
+
+      {/* Status + tenant tabs */}
       <div className="flex gap-2 overflow-x-auto pb-2 mb-4 -mx-1 px-1">
+        <button
+          onClick={() => setStatusTab("pending")}
+          className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold border transition-colors ${
+            statusTab === "pending" ? "bg-ink text-paper border-ink" : "bg-card text-ink border-border hover:bg-paper"
+          }`}
+        >
+          Pending ({cheques.filter((c) => c.status === "pending").length})
+        </button>
+        <button
+          onClick={() => setStatusTab("archived")}
+          className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold border transition-colors ${
+            statusTab === "archived" ? "bg-ink text-paper border-ink" : "bg-card text-ink border-border hover:bg-paper"
+          }`}
+        >
+          Archived ({cheques.filter((c) => c.status === "archived").length})
+        </button>
+        <span className="w-px bg-border shrink-0 my-1" />
         <button
           onClick={() => setActiveUnitId("__all__")}
           className={`shrink-0 rounded-full px-4 py-2 text-sm font-medium border transition-colors ${
-            activeUnitId === "__all__"
-              ? "bg-ink text-paper border-ink"
-              : "bg-card text-ink border-border hover:bg-paper"
+            activeUnitId === "__all__" ? "bg-seal text-white border-seal" : "bg-card text-ink border-border hover:bg-paper"
           }`}
         >
           All tenants
         </button>
-        {unitsWithCheques.map((u) => {
-          const tenantName = u.tenants?.[0]?.full_name;
-          const active = activeUnitId === u.id;
-          return (
-            <button
-              key={u.id}
-              onClick={() => setActiveUnitId(u.id)}
-              className={`shrink-0 rounded-full px-4 py-2 text-sm font-medium border transition-colors ${
-                active ? "bg-ink text-paper border-ink" : "bg-card text-ink border-border hover:bg-paper"
-              }`}
-            >
-              {u.unit_name}
-              {tenantName ? <span className={active ? "text-paper/70" : "text-inkmuted"}> · {tenantName}</span> : ""}
-            </button>
-          );
-        })}
+        {unitsWithCheques.map((u) => (
+          <button
+            key={u.id}
+            onClick={() => setActiveUnitId(u.id)}
+            className={`shrink-0 rounded-full px-4 py-2 text-sm font-medium border transition-colors ${
+              activeUnitId === u.id ? "bg-seal text-white border-seal" : "bg-card text-ink border-border hover:bg-paper"
+            }`}
+          >
+            {u.unit_name} ({countFor(u.id)})
+          </button>
+        ))}
       </div>
 
-      {/* Sort + summary */}
-      <div className="card p-4 mb-4">
-        <div className="mb-4">
-          <label className="label-field">Sort by</label>
-          <select className="input-field max-w-xs" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-            <option value="date_asc">Cheque date (earliest first)</option>
-            <option value="date_desc">Cheque date (latest first)</option>
-            <option value="amount_desc">Amount (highest first)</option>
-            <option value="amount_asc">Amount (lowest first)</option>
-          </select>
-        </div>
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          <div className="rounded-md bg-paper px-3 py-2">
-            <p className="text-xs text-inkmuted uppercase tracking-wide">Pending</p>
-            <p className="font-display font-semibold">{summary.pendingCount} cheques · ₱{summary.pendingTotal.toLocaleString()}</p>
+      {/* Filter panel */}
+      <div className="card p-4 mb-5">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+          <div>
+            <label className="label-field">Select Tenant</label>
+            <select className="input-field" value={activeUnitId} onChange={(e) => setActiveUnitId(e.target.value)}>
+              <option value="__all__">All tenants</option>
+              {unitsWithCheques.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.unit_name} {u.tenants?.[0]?.full_name ? `— ${u.tenants[0].full_name}` : ""}
+                </option>
+              ))}
+            </select>
           </div>
-          <div className="rounded-md bg-paper px-3 py-2">
-            <p className="text-xs text-inkmuted uppercase tracking-wide">Archived</p>
-            <p className="font-display font-semibold">{summary.archivedCount} cheques · ₱{summary.archivedTotal.toLocaleString()}</p>
+          <div>
+            <label className="label-field">Date Range</label>
+            <div className="flex items-center gap-2">
+              <input type="date" className="input-field" value={dateStart} onChange={(e) => setDateStart(e.target.value)} />
+              <span className="text-inkmuted text-sm">to</span>
+              <input type="date" className="input-field" value={dateEnd} onChange={(e) => setDateEnd(e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <label className="label-field">Sort By</label>
+            <select className="input-field" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+              <option value="date_asc">Cheque date (earliest first)</option>
+              <option value="date_desc">Cheque date (latest first)</option>
+              <option value="amount_desc">Amount (highest first)</option>
+              <option value="amount_asc">Amount (lowest first)</option>
+            </select>
+          </div>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input
+            type="text"
+            className="input-field flex-1"
+            placeholder="Search tenant, bank, or amount…"
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+          />
+          <div className="flex gap-2">
+            <button onClick={resetFilters} className="btn-secondary text-sm whitespace-nowrap">Reset</button>
           </div>
         </div>
       </div>
 
-      <div className="flex gap-2 mb-4">
-        <button
-          onClick={() => setStatusTab("pending")}
-          className={statusTab === "pending" ? "btn-primary text-xs" : "btn-secondary text-xs"}
-        >
-          Pending ({cheques.filter((c) => (activeUnitId === "__all__" ? true : c.unit_id === activeUnitId) && c.status === "pending").length})
-        </button>
-        <button
-          onClick={() => setStatusTab("archived")}
-          className={statusTab === "archived" ? "btn-primary text-xs" : "btn-secondary text-xs"}
-        >
-          Archived ({cheques.filter((c) => (activeUnitId === "__all__" ? true : c.unit_id === activeUnitId) && c.status === "archived").length})
-        </button>
-      </div>
+      {/* Bulk actions bar */}
+      {selected.size > 0 && (
+        <div className="card p-3 mb-3 flex items-center justify-between bg-seal/5 border-seal/30">
+          <p className="text-sm text-ink font-medium">{selected.size} selected</p>
+          <div className="flex gap-2">
+            {statusTab === "pending" && (
+              <button onClick={bulkArchive} className="btn-secondary text-xs">Archive selected</button>
+            )}
+            <button onClick={bulkDelete} className="text-xs text-bad underline">Delete selected</button>
+          </div>
+        </div>
+      )}
 
-      <div className="card divide-y divide-border">
-        {filtered.length === 0 ? (
-          <p className="text-sm text-inkmuted p-5">
-            {statusTab === "pending" ? "No pending cheques." : "No archived cheques."}
+      {/* Table */}
+      <div className="card overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <h2 className="font-display font-semibold text-ink">
+            {statusTab === "pending" ? "Pending" : "Archived"} Cheques ({filtered.length})
+          </h2>
+          <p className="text-sm font-semibold text-ink">
+            Total: ₱{filtered.reduce((s, c) => s + Number(c.amount), 0).toLocaleString()}
           </p>
+        </div>
+
+        {paginated.length === 0 ? (
+          <p className="text-sm text-inkmuted p-5">No cheques match the current filters.</p>
         ) : (
-          filtered.map((c) => (
-            <ChequeRow
-              key={c.id}
-              c={c}
-              onEdit={() => startEdit(c)}
-              onArchive={() => archiveCheque(c.id)}
-              onUnarchive={() => unarchiveCheque(c.id)}
-              onDelete={() => deleteCheque(c.id)}
-            />
-          ))
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-inkmuted">
+                  <th className="px-4 py-2 w-8">
+                    <input
+                      type="checkbox"
+                      checked={selected.size === paginated.length && paginated.length > 0}
+                      onChange={toggleSelectAll}
+                    />
+                  </th>
+                  <th className="px-2 py-2">Date</th>
+                  <th className="px-2 py-2">Tenant / Unit</th>
+                  <th className="px-2 py-2">Amount</th>
+                  <th className="px-2 py-2">Bank</th>
+                  <th className="px-2 py-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {paginated.map((c) => (
+                  <tr key={c.id} className="hover:bg-paper/60">
+                    <td className="px-4 py-3">
+                      <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelectOne(c.id)} />
+                    </td>
+                    <td className="px-2 py-3 whitespace-nowrap font-mono text-xs text-inkmuted">{c.cheque_date}</td>
+                    <td className="px-2 py-3">
+                      <span className="font-medium text-ink">{c.units?.unit_name}</span>
+                      {c.tenants?.full_name ? <span className="text-inkmuted"> — {c.tenants.full_name}</span> : ""}
+                    </td>
+                    <td className="px-2 py-3 font-medium">₱{Number(c.amount).toLocaleString()}</td>
+                    <td className="px-2 py-3 text-inkmuted">{c.bank_name || "—"}</td>
+                    <td className="px-2 py-3">
+                      <ChequeRowActions
+                        c={c}
+                        onEdit={() => startEdit(c)}
+                        onArchive={() => archiveCheque(c.id)}
+                        onUnarchive={() => unarchiveCheque(c.id)}
+                        onDelete={() => deleteCheque(c.id)}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Pagination */}
+        {filtered.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-border">
+            <p className="text-xs text-inkmuted">
+              Showing {(pageSafe - 1) * rowsPerPage + 1} to {Math.min(pageSafe * rowsPerPage, filtered.length)} of {filtered.length} entries
+            </p>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-inkmuted">Rows per page</span>
+                <select
+                  className="input-field text-xs py-1"
+                  value={rowsPerPage}
+                  onChange={(e) => setRowsPerPage(Number(e.target.value))}
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={pageSafe === 1}
+                  className="btn-secondary text-xs px-2 py-1 disabled:opacity-40"
+                >
+                  ‹
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .slice(Math.max(0, pageSafe - 3), pageSafe + 2)
+                  .map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => setPage(n)}
+                      className={`text-xs px-2.5 py-1 rounded-md ${
+                        n === pageSafe ? "bg-ink text-paper" : "text-ink hover:bg-paper"
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={pageSafe === totalPages}
+                  className="btn-secondary text-xs px-2 py-1 disabled:opacity-40"
+                >
+                  ›
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-function ChequeRow({
+function ChequeRowActions({
   c,
   onEdit,
   onArchive,
@@ -406,27 +631,25 @@ function ChequeRow({
   }
 
   return (
-    <div className="p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <p className="font-medium text-ink text-sm">
-          {c.units?.unit_name} {c.tenants?.full_name ? `— ${c.tenants.full_name}` : ""}
-        </p>
-        <p className="text-xs text-inkmuted mt-0.5">
-          {c.cheque_date} · ₱{Number(c.amount).toLocaleString()}
-          {c.cheque_number ? ` · Cheque #${c.cheque_number}` : ""}
-          {c.bank_name ? ` · ${c.bank_name}` : ""}
-        </p>
-      </div>
-      <div className="flex items-center gap-3 flex-wrap">
-        <button onClick={handleView} className="text-xs text-seal underline">View</button>
-        <button onClick={onEdit} className="text-xs text-seal underline">Edit</button>
-        {c.status === "pending" ? (
-          <button onClick={onArchive} className="text-xs text-inkmuted underline">Archive (paid)</button>
-        ) : (
-          <button onClick={onUnarchive} className="text-xs text-inkmuted underline">Move back to pending</button>
-        )}
-        <button onClick={onDelete} className="text-xs text-bad underline">Delete</button>
-      </div>
+    <div className="flex items-center gap-1.5 flex-wrap">
+      <button onClick={handleView} className="rounded-md border border-seal/40 text-seal text-xs px-2 py-1 hover:bg-seal/10">
+        View
+      </button>
+      <button onClick={onEdit} className="rounded-md border border-warn/40 text-warn text-xs px-2 py-1 hover:bg-warn/10">
+        Edit
+      </button>
+      {c.status === "pending" ? (
+        <button onClick={onArchive} className="rounded-md bg-good text-white text-xs px-2 py-1 hover:opacity-90">
+          Archive
+        </button>
+      ) : (
+        <button onClick={onUnarchive} className="rounded-md border border-border text-inkmuted text-xs px-2 py-1 hover:bg-paper">
+          Unarchive
+        </button>
+      )}
+      <button onClick={onDelete} className="rounded-md bg-bad text-white text-xs px-2 py-1 hover:opacity-90">
+        Delete
+      </button>
     </div>
   );
 }
