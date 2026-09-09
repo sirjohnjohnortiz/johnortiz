@@ -4,16 +4,17 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { useUserRole } from "@/lib/useUserRole";
 
 const NAV = [
-  { href: "/dashboard", label: "Dashboard", icon: "◈" },
-  { href: "/units", label: "Units", icon: "▤" },
-  { href: "/billing", label: "Billing", icon: "₱" },
-  { href: "/contracts", label: "Contracts", icon: "✎" },
-  { href: "/cheques", label: "Cheques", icon: "🖹" },
-  { href: "/maintenance", label: "Maintenance", icon: "⚒" },
-  { href: "/permits", label: "Permits", icon: "◍" },
-  { href: "/insurance", label: "Insurance", icon: "☂" },
+  { href: "/dashboard", label: "Dashboard", icon: "◈", adminOnly: false },
+  { href: "/units", label: "Units", icon: "▤", adminOnly: true },
+  { href: "/billing", label: "Billing", icon: "₱", adminOnly: false },
+  { href: "/contracts", label: "Contracts", icon: "✎", adminOnly: true },
+  { href: "/cheques", label: "Cheques", icon: "🖹", adminOnly: true },
+  { href: "/maintenance", label: "Maintenance", icon: "⚒", adminOnly: true },
+  { href: "/permits", label: "Permits", icon: "◍", adminOnly: true },
+  { href: "/insurance", label: "Insurance", icon: "☂", adminOnly: true },
 ];
 
 export default function Sidebar() {
@@ -21,6 +22,7 @@ export default function Sidebar() {
   const router = useRouter();
   const supabase = createClient();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { isAdmin, loading } = useUserRole();
 
   useEffect(() => {
     setMobileOpen(false);
@@ -32,6 +34,7 @@ export default function Sidebar() {
     router.refresh();
   }
 
+  const visibleNav = NAV.filter((item) => !item.adminOnly || isAdmin || loading);
   const currentLabel = NAV.find((item) => pathname.startsWith(item.href))?.label ?? "";
 
   return (
@@ -80,7 +83,7 @@ export default function Sidebar() {
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {NAV.map((item) => {
+          {visibleNav.map((item) => {
             const active = pathname.startsWith(item.href);
             return (
               <Link
@@ -98,6 +101,11 @@ export default function Sidebar() {
         </nav>
 
         <div className="px-3 py-4 border-t border-border">
+          {!loading && (
+            <p className="text-xs text-inkmuted text-center mb-2 uppercase tracking-wide">
+              {isAdmin ? "Admin" : "Staff"}
+            </p>
+          )}
           <button onClick={handleLogout} className="btn-secondary w-full text-sm">
             Sign out
           </button>

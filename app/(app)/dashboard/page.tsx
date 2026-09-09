@@ -3,10 +3,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { useUserRole } from "@/lib/useUserRole";
 import type { AppNotification } from "@/types";
 
 export default function DashboardPage() {
   const supabase = createClient();
+  const { isAdmin } = useUserRole();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [stats, setStats] = useState({ units: 0, occupied: 0, pendingBilling: 0, activeContracts: 0 });
   const [revenue, setRevenue] = useState({ monthlyRentRoll: 0, collectedThisMonth: 0, collectedAllTime: 0 });
@@ -63,10 +65,13 @@ export default function DashboardPage() {
     loadData();
   }, []);
 
+  const visibleNotifications = notifications.filter((n) => isAdmin || n.kind === "payment_pending");
+
   const kindMeta: Record<string, { label: string; cls: string; href: string }> = {
     payment_pending: { label: "Payment", cls: "stamp-bad", href: "/billing" },
     renewal: { label: "Renewal", cls: "stamp-warn", href: "/contracts" },
     permit_expiring: { label: "Permit", cls: "stamp-warn", href: "/permits" },
+    insurance_expiring: { label: "Insurance", cls: "stamp-warn", href: "/insurance" },
   };
 
   return (
@@ -88,27 +93,29 @@ export default function DashboardPage() {
         <StatCard label="Unpaid Bills" value={stats.pendingBilling} accent={stats.pendingBilling > 0} />
       </div>
 
-      <div className="mb-8">
-        <h2 className="font-display text-lg font-semibold text-ink mb-3">Revenue</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <RevenueCard label="Monthly Rent Roll" value={revenue.monthlyRentRoll} sub="From active contracts" />
-          <RevenueCard label="Collected This Month" value={revenue.collectedThisMonth} sub="Paid bills, current month" good />
-          <RevenueCard label="Collected All Time" value={revenue.collectedAllTime} sub="All paid bills to date" />
+      {isAdmin && (
+        <div className="mb-8">
+          <h2 className="font-display text-lg font-semibold text-ink mb-3">Revenue</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <RevenueCard label="Monthly Rent Roll" value={revenue.monthlyRentRoll} sub="From active contracts" />
+            <RevenueCard label="Collected This Month" value={revenue.collectedThisMonth} sub="Paid bills, current month" good />
+            <RevenueCard label="Collected All Time" value={revenue.collectedAllTime} sub="All paid bills to date" />
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="card p-5">
         <h2 className="font-display text-lg font-semibold text-ink mb-4">Alerts</h2>
         {loading ? (
           <p className="text-sm text-inkmuted">Loading…</p>
-        ) : notifications.length === 0 ? (
+        ) : visibleNotifications.length === 0 ? (
           <p className="text-sm text-inkmuted">No open alerts. Click "Refresh alerts" to check for new renewals, unpaid bills, and expiring permits.</p>
         ) : (
           <ul className="divide-y divide-border">
-            {notifications.map((n) => {
-              const meta = kindMeta[n.kind];
+            {visibleNotifications.map((n) => {
+              const meta = kindMeta[n.kind] ?? { label: n.kind, cls: "stamp-neutral", href: "/dashboard" };
               return (
-                <li key={n.id} className="py-3 flex items-center justify-between gap-4">
+                <li key={n.id} className="py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-3 min-w-0">
                     <span className={meta.cls}>{meta.label}</span>
                     <span className="text-sm text-ink truncate">{n.message}</span>
