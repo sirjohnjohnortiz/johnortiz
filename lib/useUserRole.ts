@@ -8,9 +8,11 @@ export function useUserRole() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const supabase = createClient();
     let cancelled = false;
-    async function load() {
-      const supabase = createClient();
+
+    async function fetchRole() {
+      setLoading(true);
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -27,9 +29,18 @@ export function useUserRole() {
         setLoading(false);
       }
     }
-    load();
+
+    fetchRole();
+
+    // Re-check the role any time the logged-in user changes (sign in,
+    // sign out, or switching accounts) — not just once on first mount.
+    const { data: listener } = supabase.auth.onAuthStateChange(() => {
+      fetchRole();
+    });
+
     return () => {
       cancelled = true;
+      listener.subscription.unsubscribe();
     };
   }, []);
 
