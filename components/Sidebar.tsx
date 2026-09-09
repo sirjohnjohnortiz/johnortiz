@@ -11,8 +11,8 @@ const NAV = [
   { href: "/units", label: "Units", icon: "▤", adminOnly: true },
   { href: "/billing", label: "Billing", icon: "₱", adminOnly: false },
   { href: "/contracts", label: "Contracts", icon: "✎", adminOnly: true },
-  { href: "/cheques", label: "Cheques", icon: "🖹", adminOnly: true },
-  { href: "/maintenance", label: "Maintenance", icon: "⚒", adminOnly: true },
+  { href: "/cheques", label: "Cheques", icon: "🖹", adminOnly: false },
+  { href: "/maintenance", label: "Maintenance", icon: "⚒", adminOnly: false },
   { href: "/permits", label: "Permits", icon: "◍", adminOnly: true },
   { href: "/insurance", label: "Insurance", icon: "☂", adminOnly: true },
 ];
@@ -34,7 +34,7 @@ export default function Sidebar() {
     router.refresh();
   }
 
-  const visibleNav = NAV.filter((item) => !item.adminOnly || isAdmin || loading);
+  const visibleNav = NAV.filter((item) => !item.adminOnly || isAdmin);
   const currentLabel = NAV.find((item) => pathname.startsWith(item.href))?.label ?? "";
 
   return (

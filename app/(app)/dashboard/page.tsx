@@ -65,7 +65,9 @@ export default function DashboardPage() {
     loadData();
   }, []);
 
-  const visibleNotifications = notifications.filter((n) => isAdmin || n.kind === "payment_pending");
+  const visibleNotifications = notifications.filter(
+    (n) => isAdmin || n.kind === "payment_pending" || n.kind === "renewal"
+  );
 
   const kindMeta: Record<string, { label: string; cls: string; href: string }> = {
     payment_pending: { label: "Payment", cls: "stamp-bad", href: "/billing" },
