@@ -10,6 +10,7 @@ const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: "◈", adminOnly: false },
   { href: "/units", label: "Units", icon: "▤", adminOnly: true },
   { href: "/billing", label: "Billing", icon: "₱", adminOnly: false },
+  { href: "/payment-records", label: "Payment Record", icon: "🧾", adminOnly: false },
   { href: "/contracts", label: "Contracts", icon: "✎", adminOnly: true },
   { href: "/cheques", label: "Cheques", icon: "🖹", adminOnly: false },
   { href: "/maintenance", label: "Maintenance", icon: "⚒", adminOnly: false },
