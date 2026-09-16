@@ -6,30 +6,62 @@ import { createClient } from "@/lib/supabase/client";
 import { useUserRole } from "@/lib/useUserRole";
 import type { AppNotification } from "@/types";
 
+type DisplayAlert = AppNotification & { computed?: boolean };
+
 export default function DashboardPage() {
   const supabase = createClient();
   const { isAdmin } = useUserRole();
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [stats, setStats] = useState({ units: 0, occupied: 0, pendingBilling: 0, activeContracts: 0 });
+  const [notifications, setNotifications] = useState<DisplayAlert[]>([]);
+  const [stats, setStats] = useState({ units: 0, occupied: 0, pendingBilling: 0, activeContracts: 0, chequesForDeposit: 0 });
   const [revenue, setRevenue] = useState({ monthlyRentRoll: 0, collectedThisMonth: 0, collectedAllTime: 0 });
   const [loading, setLoading] = useState(true);
   const [checking, setChecking] = useState(false);
 
   async function loadData() {
     setLoading(true);
-    const [{ data: notes }, { data: units }, { data: billing }, { data: contracts }, { data: paidBilling }] = await Promise.all([
-      supabase.from("notifications").select("*").eq("resolved", false).order("due_on", { ascending: true }),
-      supabase.from("units").select("id,status"),
-      supabase.from("billing").select("id,status").in("status", ["pending", "overdue"]),
-      supabase.from("contracts").select("id,status,monthly_rent").eq("status", "active"),
-      supabase.from("billing").select("amount_due,billing_period").eq("status", "paid"),
-    ]);
-    setNotifications(notes ?? []);
+    const today = new Date().toISOString().slice(0, 10);
+    const [{ data: notes }, { data: units }, { data: billing }, { data: contracts }, { data: paidBilling }, { data: dueCheques }] =
+      await Promise.all([
+        supabase.from("notifications").select("*").eq("resolved", false).order("due_on", { ascending: true }),
+        supabase.from("units").select("id,status"),
+        supabase.from("billing").select("id,status").in("status", ["pending", "overdue"]),
+        supabase.from("contracts").select("id,status,monthly_rent").eq("status", "active"),
+        supabase.from("billing").select("amount_due,billing_period").eq("status", "paid"),
+        supabase
+          .from("cheques")
+          .select("id,cheque_date,amount,units(unit_name),tenants(full_name)")
+          .eq("status", "pending")
+          .lte("cheque_date", today)
+          .order("cheque_date", { ascending: true }),
+      ]);
+
+    // Cheques whose date has arrived (or already passed) and haven't been
+    // archived/deposited yet — these stay flagged until archived, even if overdue.
+    const chequeAlerts: DisplayAlert[] = (dueCheques ?? []).map((c: any) => ({
+      id: "cheque-" + c.id,
+      kind: "cheque_deposit",
+      related_table: "cheques",
+      related_id: c.id,
+      message: `For deposit: ${c.tenants?.full_name ?? "Tenant"} — ${c.units?.unit_name ?? "Unit"} · ₱${Number(c.amount).toLocaleString()}`,
+      due_on: c.cheque_date,
+      resolved: false,
+      created_at: "",
+      computed: true,
+    }));
+
+    const merged = [...(notes ?? []), ...chequeAlerts].sort((a, b) => {
+      if (!a.due_on) return 1;
+      if (!b.due_on) return -1;
+      return a.due_on.localeCompare(b.due_on);
+    });
+
+    setNotifications(merged);
     setStats({
       units: units?.length ?? 0,
       occupied: units?.filter((u) => u.status === "occupied").length ?? 0,
       pendingBilling: billing?.length ?? 0,
       activeContracts: contracts?.length ?? 0,
+      chequesForDeposit: chequeAlerts.length,
     });
 
     const monthlyRentRoll = (contracts ?? []).reduce((sum, c) => sum + (Number(c.monthly_rent) || 0), 0);
@@ -66,7 +98,7 @@ export default function DashboardPage() {
   }, []);
 
   const visibleNotifications = notifications.filter(
-    (n) => isAdmin || n.kind === "payment_pending" || n.kind === "renewal"
+    (n) => isAdmin || n.kind === "payment_pending" || n.kind === "renewal" || n.kind === "cheque_deposit"
   );
 
   const kindMeta: Record<string, { label: string; cls: string; href: string }> = {
@@ -74,6 +106,7 @@ export default function DashboardPage() {
     renewal: { label: "Renewal", cls: "stamp-warn", href: "/contracts" },
     permit_expiring: { label: "Permit", cls: "stamp-warn", href: "/permits" },
     insurance_expiring: { label: "Insurance", cls: "stamp-warn", href: "/insurance" },
+    cheque_deposit: { label: "Deposit", cls: "stamp-bad", href: "/cheques" },
   };
 
   return (
@@ -87,6 +120,20 @@ export default function DashboardPage() {
           {checking ? "Checking…" : "Refresh alerts"}
         </button>
       </div>
+
+      {stats.chequesForDeposit > 0 && (
+        <div className="card p-4 mb-6 border-bad/40 bg-bad/5 flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <p className="text-sm font-semibold text-bad">
+              {stats.chequesForDeposit} cheque{stats.chequesForDeposit > 1 ? "s" : ""} due for deposit today or earlier
+            </p>
+            <p className="text-xs text-inkmuted mt-0.5">
+              Stays flagged until each cheque is marked Archived once deposited.
+            </p>
+          </div>
+          <Link href="/cheques" className="btn-secondary text-sm shrink-0">Go to Cheques</Link>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard label="Total Units" value={stats.units} />
@@ -127,9 +174,11 @@ export default function DashboardPage() {
                     <Link href={meta.href} className="text-xs text-seal underline">
                       View
                     </Link>
-                    <button onClick={() => resolveNotification(n.id)} className="text-xs text-inkmuted underline">
-                      Dismiss
-                    </button>
+                    {!n.computed && (
+                      <button onClick={() => resolveNotification(n.id)} className="text-xs text-inkmuted underline">
+                        Dismiss
+                      </button>
+                    )}
                   </div>
                 </li>
               );
@@ -161,3 +210,4 @@ function RevenueCard({ label, value, sub, good }: { label: string; value: number
     </div>
   );
 }
+
