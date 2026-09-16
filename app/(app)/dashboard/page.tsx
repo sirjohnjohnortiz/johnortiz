@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useUserRole } from "@/lib/useUserRole";
 import type { AppNotification } from "@/types";
 
-type DisplayAlert = AppNotification & { computed?: boolean };
+type DisplayAlert = Omit<AppNotification, "kind"> & { kind: string; computed?: boolean };
 
 export default function DashboardPage() {
   const supabase = createClient();
